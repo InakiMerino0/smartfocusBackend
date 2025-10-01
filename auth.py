@@ -52,12 +52,6 @@ def _buscar_usuario_por_id(db: Session, usuario_id: int) -> Optional[models.Usua
     return db.get(models.Usuario, usuario_id)
 
 def login_user(request: schemas.LoginRequest, db: Session):
-    """
-    Autentica por usuario y clave.
-    - request.usuario
-    - request.clave
-    Devuelve access token Bearer.
-    """
     usuario = _buscar_usuario_por_usuario(db, request.usuario)
     if not usuario or not utils.verificar_clave(request.clave, usuario.usuario_clave):
         # Mensaje genérico para no filtrar existencia
