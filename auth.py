@@ -11,18 +11,12 @@ from jose import jwt, JWTError
 
 from . import models, utils, database, schemas
 
-# =========================
-# Config (desde entorno)
-# =========================
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_ACCESS")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 _http_bearer = HTTPBearer(auto_error=False)
 
-# =========================
-# Helpers JWT
-# =========================
 def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
 
