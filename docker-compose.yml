@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: smartfocus-backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/smartfocus
+      # Si usás Uvicorn, asegúrate de exponer en 0.0.0.0:8000 dentro del contenedor
+      # Ej. CMD: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    # Healthcheck del backend -> usar /ready (readiness real que verifica DB)
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/ready'); sys.exit(0)\""]
+      interval: 5s       # chequea más seguido, detecta rápido
+      timeout: 3s
+      retries: 12        # da ~1 minuto total de gracia
+      start_period: 10s  # da tiempo a Uvicorn para bootear
+
+  db:
+    image: postgres:15
+    container_name: smartfocus-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: smartfocus
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Para producción, evitá exponer el puerto hacia afuera si solo lo usa el backend
+    ports:
+      - "5432:5432"   # en dev viene bien; en prod podrías quitarlo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d smartfocus"]
+      interval: 5s
+      timeout: 3s
+      retries: 20       # la primera inicialización de PG puede tardar
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4:9.8
+    container_name: smartfocus-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  pgadmin_data:
