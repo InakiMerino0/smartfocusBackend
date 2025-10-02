@@ -7,26 +7,22 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Setup SSH Key
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SECRET_PASSKEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ec2-18-225-92-56.us-east-2.compute.amazonaws.com >> ~/.ssh/known_hosts
 
-      - name: Add EC2 to known hosts
+      - name: Deploy on EC2
         run: |
-          ssh-keyscan -H ec2-52-14-183-62.us-east-2.compute.amazonaws.com >> ~/.ssh/known_hosts
-
-      - name: Deploy to EC2
-        run: |
-          ssh ubuntu@ec2-52-14-183-62.us-east-2.compute.amazonaws.com << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 ubuntu@ec2-18-225-92-56.us-east-2.compute.amazonaws.com << 'EOF'
             cd /home/ubuntu/SmartFocus
             git pull origin main
             docker compose down
