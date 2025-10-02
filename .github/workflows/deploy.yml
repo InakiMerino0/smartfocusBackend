@@ -27,19 +27,19 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Test SSH
+      - name: Test SSH (OK esperado)
         run: ssh -i smartfocus_ci ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo OK"
 
       - name: Sync project to EC2 (rsync)
         run: |
           RSYNC_EXCLUDES="--exclude .git --exclude .github --exclude node_modules --exclude __pycache__"
-          # Si tu .env de prod vive en el server:
+          # Si tu .env de prod ya está en el server y no querés sobreescribirlo:
           # RSYNC_EXCLUDES="$RSYNC_EXCLUDES --exclude .env"
           rsync -az --delete $RSYNC_EXCLUDES -e "ssh -i smartfocus_ci" \
             ./ \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.EC2_PATH }}/
 
-      - name: Rebuild & restart backend
+      - name: Rebuild & restart backend (force recreate)
         run: |
           ssh -i smartfocus_ci ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
             set -e
