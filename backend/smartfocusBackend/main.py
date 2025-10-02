@@ -18,7 +18,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-afdfdfsdsf
+
 # Solo incluir routers que están implementados
 app.include_router(v1_auth.router)
 # TODO: Implementar y añadir los siguientes routers:
