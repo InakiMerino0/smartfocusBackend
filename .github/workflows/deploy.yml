@@ -6,21 +6,24 @@ on:
     paths:
       - "backend/**"
       - "docker-compose.yml"
-      - ".github/workflows/deploy-backend.yml"
+      - ".github/workflows/deploy.yml"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore SSH key from base64
+      - name: Restore SSH key (multiline secret)
         run: |
-          echo "$DEPLOY_KEY_B64" | base64 -d > smartfocus_ci
+          umask 077
+          cat > smartfocus_ci <<'EOF'
+          ${{ secrets.DEPLOY_KEY }}
+          EOF
+          sed -i 's/\r$//' smartfocus_ci
           chmod 600 smartfocus_ci
-        env:
-          DEPLOY_KEY_B64: ${{ secrets.DEPLOY_KEY_B64 }}
 
       - name: Add EC2 to known_hosts
         run: |
