@@ -20,7 +20,7 @@ jobs:
         run: |
           umask 077
           cat > smartfocus_ci <<'EOF'
-          ${{ secrets.DEPLOY_KEY }}
+          ${{ secrets.EC2_SECRET_PASSKEY }}
           EOF
           sed -i 's/\r$//' smartfocus_ci
           chmod 600 smartfocus_ci
