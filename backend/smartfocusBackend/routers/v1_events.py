@@ -1,4 +1,3 @@
-# routers/v1_events.py
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
