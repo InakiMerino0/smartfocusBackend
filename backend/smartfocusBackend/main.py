@@ -6,7 +6,7 @@ from sqlalchemy import text
 from .routers import v1_auth
 
 app = FastAPI(
-    title="SmartFocus Backend",
+    title="SmartFocus Backendddddd",
     description="Autenticación de usuarios, gestión de eventos y materias con IA",
     version="1.0"
 )
