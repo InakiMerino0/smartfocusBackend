@@ -1,0 +1,21 @@
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# Virtual envs locales
+venv/
+.env/
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
