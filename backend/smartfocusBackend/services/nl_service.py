@@ -1,9 +1,8 @@
 # services/nl_service.py
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional
 from datetime import date
 
 from sqlalchemy.orm import Session
@@ -26,7 +25,6 @@ class PlannedAction:
     kind: ActionKind
     args: Dict[str, Any]   # argumentos listos para servicio (validados/saneados)
     description: str       # para mostrar al usuario
-
 
 @dataclass
 class PlanResult:
@@ -56,35 +54,14 @@ def _ensure_ownership_evento(db: Session, usuario_id: int, evento_id: int) -> mo
     ev = db.get(models.Evento, evento_id)
     if not ev:
         raise ValueError("Evento no encontrado")
-    mat = _ensure_ownership_materia(db, usuario_id, ev.evento_materia_id)
+    _ensure_ownership_materia(db, usuario_id, ev.evento_materia_id)
     return ev
 
 
 # =========
-# LLM client (Gemini) – adapter minimal
+# Normalización del output del LLM → acciones ejecutables
+# (recibe tool calls ya parseados por el adaptador Gemini)
 # =========
-def _call_gemini_tools(user_text: str, locale: str = "es-AR") -> List[Dict[str, Any]]:
-    """
-    Devuelve una lista de tool_calls 'normalizados':
-    [
-      {"name": "create_materia", "args": {"materia_nombre": "Matemáticas"}},
-      {"name": "create_evento", "args": {"materia_ref": "Matemáticas", "evento_nombre":"Parcial 1","evento_fecha":"2025-09-28","evento_estado":"pendiente"}},
-      ...
-    ]
-    NOTA: Integra acá la SDK real de Gemini (google-generativeai) con Function Calling.
-    Por ahora, dejamos un stub que NO intenta parsear libre, solo de ejemplo.
-    """
-    # ── TODO: integrar gemini oficialmente.
-    # Levanta guardas: en producción, si no hay GEMINI_API_KEY -> error explícito.
-    if not os.getenv("GEMINI_API_KEY"):
-        # Stub mínimo: no adivina; solo retorna lista vacía
-        return []
-    # Aquí iría la llamada real, que retorna tool_calls en el formato anterior.
-    # Para mantener este bloque auto-contenido, devolvemos vacío por defecto.
-    return []
-
-
-# Normalización del output de LLM → acciones ejecutables
 def _normalize_tool_call(
     raw: Dict[str, Any],
     db: Session,
@@ -222,26 +199,29 @@ def _normalize_tool_call(
             )
         )
 
-    else:
-        # Ignorar herramientas desconocidas
-        pass
-
+    # herramientas desconocidas: se ignoran
     return out
 
 
 # =========
 # API del servicio
 # =========
-def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
+def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResult:
     """
-    Llama al LLM (Gemini) para obtener tool_calls, normaliza a acciones
-    y *verifica* existencias según la regla:
+    Obtiene tool_calls desde el cliente LLM, normaliza a acciones y
+    verifica existencias para aplicar la regla de idempotencia:
       - Si existe -> solo UPDATE/DELETE (CREATE prohibido)
       - Si NO existe -> solo CREATE (UPDATE/DELETE prohibido)
     Anota cada acción con: a.allow (bool), a.resolved (dict), a.conflict (str|None)
-    y construye un summary legible con el resultado de la verificación.
+    y construye un summary legible.
     """
+    # 1) tool calls -> acciones normalizadas
+    tool_calls = llm.get_tool_calls(user_text, locale="es-AR")
+    actions: List[PlannedAction] = []
+    for call in tool_calls:
+        actions.extend(_normalize_tool_call(call, db, usuario_id))
 
+    # 2) verificación de existencias + regla de negocio (allow/conflict/resolved)
     def _find_materia_by_name(uid: int, nombre: str) -> Optional[models.Materia]:
         q = select(models.Materia).where(
             models.Materia.materia_usuario_id == uid,
@@ -250,12 +230,11 @@ def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
         return db.execute(q).scalar_one_or_none()
 
     def _find_evento_by_natural_key(mid: int, nombre: str, fecha_val) -> Optional[models.Evento]:
-        # fecha_val puede venir como str ISO (YYYY-MM-DD) o date
         if isinstance(fecha_val, str):
             try:
                 fecha_val = date.fromisoformat(fecha_val)
             except ValueError:
-                return None  # lo marcará como conflicto más abajo si hace falta
+                return None
         q = select(models.Evento).where(
             models.Evento.evento_materia_id == mid,
             models.Evento.evento_nombre == nombre.strip(),
@@ -263,19 +242,11 @@ def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
         )
         return db.execute(q).scalar_one_or_none()
 
-    # 1) tool calls -> acciones normalizadas
-    tool_calls = _call_gemini_tools(user_text, locale="es-AR")
-    actions: List[PlannedAction] = []
-    for call in tool_calls:
-        actions.extend(_normalize_tool_call(call, db, usuario_id))
-
-    # 2) verificación de existencias + regla de negocio (allow/conflict/resolved)
     summary_lines: List[str] = []
     if not actions:
         return PlanResult(actions=[], summary="No se detectaron acciones. Podés reformular o ser más específico.")
 
     for a in actions:
-        # valores por defecto de anotación
         a.allow = True
         a.resolved = {}
         a.conflict = None
@@ -296,8 +267,6 @@ def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
 
         elif kind in ("update_materia", "delete_materia"):
             mid = args.get("materia_id")
-            # si por algún motivo no vino id, la normalización debió fallar antes,
-            # pero igual intentamos resolver por nombre si está.
             if not mid and "materia_nombre" in args:
                 m2 = _find_materia_by_name(usuario_id, args["materia_nombre"])
                 mid = m2.materia_id if m2 else None
@@ -315,7 +284,6 @@ def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
             fecha_val = args.get("evento_fecha")
             a.resolved["materia_id"] = mid
 
-            # validar materia primero
             m_ok = bool(mid and db.get(models.Materia, mid))
             if not m_ok:
                 a.allow = False
@@ -337,7 +305,7 @@ def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
 
         elif kind in ("update_evento", "delete_evento"):
             evid = args.get("evento_id")
-            a.resolved["evento_id]"] = evid
+            a.resolved["evento_id"] = evid  # ← corregido el typo
             ev = db.get(models.Evento, evid) if evid else None
             if not ev:
                 a.allow = False
@@ -348,17 +316,13 @@ def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
                 summary_lines.append(f"✔ {kind.replace('_', ' ').title()} evento #{evid}: permitido.")
 
         else:
-            # acción desconocida (no debería pasar si el contrato de tools es correcto)
             a.allow = False
             a.conflict = "Acción desconocida."
             summary_lines.append(f"✖ Acción desconocida: {kind}.")
 
-    # 3) construir summary legible
     summary_header = "Resultado del plan (verificación de existencias):"
     summary = summary_header + "\n" + "\n".join(summary_lines)
-
     return PlanResult(actions=actions, summary=summary)
-
 
 
 def execute_actions(
@@ -408,12 +372,19 @@ def execute_actions(
     return results
 
 
-# Helpers para (de)serializar acciones en el wire (router)
+# Helpers para (de)serializar acciones para la API
 def serialize_plan(plan: PlanResult) -> Dict[str, Any]:
     return {
         "summary": plan.summary,
         "actions": [
-            {"kind": a.kind, "args": a.args, "description": a.description}
+            {
+                "kind": a.kind,
+                "args": a.args,
+                "description": a.description,
+                "allow": getattr(a, "allow", True),
+                "resolved": getattr(a, "resolved", {}),
+                "conflict": getattr(a, "conflict", None),
+            }
             for a in plan.actions
         ],
     }

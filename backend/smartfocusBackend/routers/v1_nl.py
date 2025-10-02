@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import auth
 from ..services import nl_service as svc
+from ..integrations.gemini_client import GeminiClient  # ← nuevo adaptador
 
 router = APIRouter(prefix="/api/v1/nl", tags=["nl"])
 
@@ -30,6 +31,14 @@ class NLExecuteResponse(BaseModel):
     results: List[Dict[str, Any]]
 
 
+def get_llm_client() -> GeminiClient:
+    """
+    Factory muy simple para inyectar el cliente Gemini.
+    Lee GEMINI_API_KEY / GEMINI_MODEL del entorno.
+    """
+    return GeminiClient()
+
+
 @router.post(
     "/command",
     response_model=Dict[str, Any],
@@ -45,6 +54,7 @@ def nl_command(
     payload: NLCommandRequest,
     db: Session = Depends(get_db),
     usuario=Depends(auth.get_current_user),
+    llm: GeminiClient = Depends(get_llm_client),  # ← inyección del cliente
 ):
     """
     Flujo:
@@ -55,20 +65,19 @@ def nl_command(
     """
     try:
         if payload.mode == "plan":
-            plan = svc.plan_actions(db, usuario.usuario_id, payload.text)
+            plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
             return svc.serialize_plan(plan)
 
         # execute
         if payload.actions:
             actions = svc.deserialize_actions(payload.actions)
         else:
-            plan = svc.plan_actions(db, usuario.usuario_id, payload.text)
+            plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
             actions = plan.actions
 
         results = svc.execute_actions(db, usuario.usuario_id, actions)
         summary = "Acciones ejecutadas:\n" + "\n".join(f"- {r.get('kind')}" for r in results) if results else "Sin cambios."
 
-        # Serializamos objetos ORM en results (FastAPI + Pydantic manejarán via from_attributes)
         return {"summary": summary, "results": results}
 
     except PermissionError as e:
@@ -76,5 +85,4 @@ def nl_command(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception:
-        # Podés loguear e.__class__.__name__, etc.
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error procesando la orden")
