@@ -1,34 +1,50 @@
-name: Deploy to EC2
+name: Deploy Backend to EC2
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy-backend.yml"
 
 jobs:
   deploy:
-    name: Deploy to EC2
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup SSH Key
+      - name: Restore SSH key from base64
+        run: |
+          echo "$DEPLOY_KEY_B64" | base64 -d > smartfocus_ci
+          chmod 600 smartfocus_ci
+        env:
+          DEPLOY_KEY_B64: ${{ secrets.DEPLOY_KEY_B64 }}
+
+      - name: Add EC2 to known_hosts
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SECRET_PASSKEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Add EC2 to known hosts
-        run: |
-          ssh-keyscan -H ec2-52-14-183-62.us-east-2.compute.amazonaws.com >> ~/.ssh/known_hosts
+      - name: Test SSH
+        run: ssh -i smartfocus_ci ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo OK"
 
-      - name: Deploy to EC2
+      - name: Sync project to EC2 (rsync)
         run: |
-          ssh ubuntu@ec2-52-14-183-62.us-east-2.compute.amazonaws.com << 'EOF'
-            cd /home/ubuntu/SmartFocus
-            git pull origin main
-            docker compose down
-            docker compose up -d --build
-          EOF
+          RSYNC_EXCLUDES="--exclude .git --exclude .github --exclude node_modules --exclude __pycache__"
+          # Si tu .env de prod vive en el server:
+          # RSYNC_EXCLUDES="$RSYNC_EXCLUDES --exclude .env"
+          rsync -az --delete $RSYNC_EXCLUDES -e "ssh -i smartfocus_ci" \
+            ./ \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.EC2_PATH }}/
+
+      - name: Rebuild & restart backend
+        run: |
+          ssh -i smartfocus_ci ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+            set -e
+            cd '${{ secrets.EC2_PATH }}' && \
+            docker compose build backend && \
+            docker compose up -d --force-recreate --no-deps backend && \
+            docker image prune -f
+          "
