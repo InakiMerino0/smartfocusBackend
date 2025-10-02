@@ -10,8 +10,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # copia el código (ajusta si tu módulo no es "smartfocusBackend")
-COPY smartfocusBackend/ /app
+COPY ./app
 
 # expone FastAPI por 8000
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "smartfocusBackend.main:app", "--host", "0.0.0.0", "--port", "8000"]
