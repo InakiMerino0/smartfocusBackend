@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # copia el código (ajusta si tu módulo no es "smartfocusBackend")
-COPY ./app
+COPY . .
 
 # expone FastAPI por 8000
 EXPOSE 8000
