@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple
+from datetime import date
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -11,10 +12,6 @@ from sqlalchemy import select
 from .. import models, schemas
 from . import subject_service, event_service
 
-
-# =========
-# Tipos
-# =========
 ActionKind = Literal[
     "create_materia",
     "update_materia",
@@ -87,9 +84,7 @@ def _call_gemini_tools(user_text: str, locale: str = "es-AR") -> List[Dict[str, 
     return []
 
 
-# =========
 # Normalización del output de LLM → acciones ejecutables
-# =========
 def _normalize_tool_call(
     raw: Dict[str, Any],
     db: Session,
@@ -239,20 +234,131 @@ def _normalize_tool_call(
 # =========
 def plan_actions(db: Session, usuario_id: int, user_text: str) -> PlanResult:
     """
-    Llama al LLM (Gemini) para obtener tool_calls y normaliza a una lista de acciones.
+    Llama al LLM (Gemini) para obtener tool_calls, normaliza a acciones
+    y *verifica* existencias según la regla:
+      - Si existe -> solo UPDATE/DELETE (CREATE prohibido)
+      - Si NO existe -> solo CREATE (UPDATE/DELETE prohibido)
+    Anota cada acción con: a.allow (bool), a.resolved (dict), a.conflict (str|None)
+    y construye un summary legible con el resultado de la verificación.
     """
+
+    def _find_materia_by_name(uid: int, nombre: str) -> Optional[models.Materia]:
+        q = select(models.Materia).where(
+            models.Materia.materia_usuario_id == uid,
+            models.Materia.materia_nombre == nombre.strip()
+        )
+        return db.execute(q).scalar_one_or_none()
+
+    def _find_evento_by_natural_key(mid: int, nombre: str, fecha_val) -> Optional[models.Evento]:
+        # fecha_val puede venir como str ISO (YYYY-MM-DD) o date
+        if isinstance(fecha_val, str):
+            try:
+                fecha_val = date.fromisoformat(fecha_val)
+            except ValueError:
+                return None  # lo marcará como conflicto más abajo si hace falta
+        q = select(models.Evento).where(
+            models.Evento.evento_materia_id == mid,
+            models.Evento.evento_nombre == nombre.strip(),
+            models.Evento.evento_fecha == fecha_val,
+        )
+        return db.execute(q).scalar_one_or_none()
+
+    # 1) tool calls -> acciones normalizadas
     tool_calls = _call_gemini_tools(user_text, locale="es-AR")
     actions: List[PlannedAction] = []
     for call in tool_calls:
         actions.extend(_normalize_tool_call(call, db, usuario_id))
 
-    # Construye un resumen legible
-    if actions:
-        summary = "Se planean las siguientes acciones:\n" + "\n".join(f"- {a.description}" for a in actions)
-    else:
-        summary = "No se detectaron acciones. Podés reformular o ser más específico."
+    # 2) verificación de existencias + regla de negocio (allow/conflict/resolved)
+    summary_lines: List[str] = []
+    if not actions:
+        return PlanResult(actions=[], summary="No se detectaron acciones. Podés reformular o ser más específico.")
+
+    for a in actions:
+        # valores por defecto de anotación
+        a.allow = True
+        a.resolved = {}
+        a.conflict = None
+
+        kind = a.kind
+        args = a.args
+
+        if kind == "create_materia":
+            nombre = args.get("materia_nombre", "")
+            m = _find_materia_by_name(usuario_id, nombre) if nombre else None
+            a.resolved["materia_id"] = m.materia_id if m else None
+            if m:
+                a.allow = False
+                a.conflict = "Materia ya existe; solo se permite update/delete."
+                summary_lines.append(f"✖ Crear materia '{nombre}': ya existe (id={m.materia_id}).")
+            else:
+                summary_lines.append(f"✔ Crear materia '{nombre}': permitido (no existe).")
+
+        elif kind in ("update_materia", "delete_materia"):
+            mid = args.get("materia_id")
+            # si por algún motivo no vino id, la normalización debió fallar antes,
+            # pero igual intentamos resolver por nombre si está.
+            if not mid and "materia_nombre" in args:
+                m2 = _find_materia_by_name(usuario_id, args["materia_nombre"])
+                mid = m2.materia_id if m2 else None
+            a.resolved["materia_id"] = mid
+            if not mid or not db.get(models.Materia, mid):
+                a.allow = False
+                a.conflict = "Materia no existe; no se permite update/delete."
+                summary_lines.append(f"✖ {kind.replace('_', ' ').title()} materia: no existe.")
+            else:
+                summary_lines.append(f"✔ {kind.replace('_', ' ').title()} materia #{mid}: permitido.")
+
+        elif kind == "create_evento":
+            mid = args.get("evento_materia_id")
+            nombre = args.get("evento_nombre", "")
+            fecha_val = args.get("evento_fecha")
+            a.resolved["materia_id"] = mid
+
+            # validar materia primero
+            m_ok = bool(mid and db.get(models.Materia, mid))
+            if not m_ok:
+                a.allow = False
+                a.conflict = "Materia no existe; no se puede crear el evento."
+                summary_lines.append(f"✖ Crear evento '{nombre}': materia #{mid} no existe.")
+            else:
+                ev = _find_evento_by_natural_key(mid, nombre, fecha_val)
+                a.resolved["evento_id"] = ev.evento_id if ev else None
+                if ev:
+                    a.allow = False
+                    a.conflict = "Evento ya existe; solo se permite update/delete."
+                    summary_lines.append(
+                        f"✖ Crear evento '{nombre}' ({fecha_val}) en materia #{mid}: ya existe (id={ev.evento_id})."
+                    )
+                else:
+                    summary_lines.append(
+                        f"✔ Crear evento '{nombre}' ({fecha_val}) en materia #{mid}: permitido (no existe)."
+                    )
+
+        elif kind in ("update_evento", "delete_evento"):
+            evid = args.get("evento_id")
+            a.resolved["evento_id]"] = evid
+            ev = db.get(models.Evento, evid) if evid else None
+            if not ev:
+                a.allow = False
+                a.conflict = "Evento no existe; no se permite update/delete."
+                summary_lines.append(f"✖ {kind.replace('_', ' ').title()} evento: no existe.")
+            else:
+                a.resolved["materia_id"] = ev.evento_materia_id
+                summary_lines.append(f"✔ {kind.replace('_', ' ').title()} evento #{evid}: permitido.")
+
+        else:
+            # acción desconocida (no debería pasar si el contrato de tools es correcto)
+            a.allow = False
+            a.conflict = "Acción desconocida."
+            summary_lines.append(f"✖ Acción desconocida: {kind}.")
+
+    # 3) construir summary legible
+    summary_header = "Resultado del plan (verificación de existencias):"
+    summary = summary_header + "\n" + "\n".join(summary_lines)
 
     return PlanResult(actions=actions, summary=summary)
+
 
 
 def execute_actions(
@@ -302,9 +408,7 @@ def execute_actions(
     return results
 
 
-# =========
 # Helpers para (de)serializar acciones en el wire (router)
-# =========
 def serialize_plan(plan: PlanResult) -> Dict[str, Any]:
     return {
         "summary": plan.summary,
