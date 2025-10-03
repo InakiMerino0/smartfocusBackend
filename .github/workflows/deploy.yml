@@ -33,7 +33,6 @@ jobs:
             -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
             ./ $EC2_USER@$EC2_HOST:$APP_DIR/
 
-      # ⚠️ Usamos ruta LITERAL en el server. Nada de $APP_DIR dentro del SSH.
       - name: Create .env on EC2 from Secrets
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $EC2_USER@$EC2_HOST << 'EOF'
@@ -45,11 +44,6 @@ DB_PASS=${{ secrets.DB_PASS }}
 DB_HOST=${{ secrets.DB_HOST }}
 DB_PORT=${{ secrets.DB_PORT }}
 DB_NAME=${{ secrets.DB_NAME }}
-JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
-ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
-GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
 EOT
             ls -la /home/ubuntu/SmartFocus/.env
           EOF
