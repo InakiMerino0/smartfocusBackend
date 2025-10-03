@@ -25,9 +25,9 @@ services:
     container_name: smartfocus-db
     restart: always
     environment:
-      POSTGRES_USER: smartfocus
-      POSTGRES_PASSWORD: fbebidmr
-      POSTGRES_DB: smartfocus_db
+      DB_USER: smartfocus
+      DB_PASSWORD: fbebidmr
+      DB_NAME: smartfocus_db
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
@@ -44,7 +44,7 @@ services:
     container_name: smartfocus-pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: smartfocu@admin.com
+      PGADMIN_DEFAULT_EMAIL: smartfocuS@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin123
     ports:
       - "5050:80"
