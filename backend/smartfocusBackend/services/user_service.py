@@ -10,7 +10,7 @@ from ..utils import hash_clave
 
 class UsuarioDuplicado(Exception):
     """Se intenta registrar un usuario con email existente."""
-    ...
+    
 
 
 def _email_existe(db: Session, email: str) -> bool:
@@ -28,7 +28,7 @@ def register_user(db: Session, payload: schemas.UsuarioCreate) -> schemas.Usuari
 
     user = models.Usuario(
         usuario_nombre=nombre_norm,
-        usuario_email=email_norm,
+        usuario_email=email_norm,               
         usuario_password=hash_clave(payload.password),
     )
     db.add(user)
