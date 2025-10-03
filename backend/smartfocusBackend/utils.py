@@ -1,7 +1,7 @@
 from passlib.context import CryptContext
 
 _pwd = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["bcrypt_sha256"],
     deprecated="auto",
 )
 
@@ -14,7 +14,7 @@ def hash_clave(plain_password: str) -> str:
 
 # Verifica que plain_password coincida con el hash bcrypt almacenado en DB
 def verificar_clave(plain_password: str, stored_hash: str) -> bool:
-    
+
     if not stored_hash:
         return False
     try:
