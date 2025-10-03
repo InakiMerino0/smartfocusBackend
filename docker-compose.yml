@@ -26,7 +26,7 @@ services:
     restart: always
     environment:
       DB_USER: smartfocus
-      DB_PASSWORD: fbebidmr
+      DB_PASSWORD: fbebidim
       DB_NAME: smartfocus_db
     volumes:
       - db_data:/var/lib/postgresql/data
