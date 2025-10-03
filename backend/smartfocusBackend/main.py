@@ -1,15 +1,18 @@
-from fastapi import FastAPI, Depends, HTTPException
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from .database import get_db
-from sqlalchemy import text
-from .routers import v1_auth, v1_events, v1_nl, v1_subjects, v1_users
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
-app = FastAPI(
-    title="SmartFocus Backend",
-    description="Autenticación de usuarios, gestión de eventos y materias con IA",
-    version="1.0"
-)
+from .logging_config import setup_logging
+from .observability import RequestIDMiddleware, get_request_id
+
+setup_logging()
+
+app = FastAPI(title="SmartFocus Backend", version="1.0")
+app.add_middleware(RequestIDMiddleware)
+
+logger = logging.getLogger("smartfocus")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,8 +22,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(v1_auth.router)
-app.include_router(v1_events.router)
-app.include_router(v1_nl.router)  
-app.include_router(v1_subjects.router)
-app.include_router(v1_users.router)
+@app.get("/health")
+def health():
+    logger.info("Health check OK", extra={"path": "/health", "method": "GET"})
+    return {"status": "ok"}
+
+@app.exception_handler(Exception)
+async def unhandled_exc_handler(request: Request, exc: Exception):
+    rid = get_request_id()
+    logger.error(
+        "Unhandled exception",
+        extra={"path": request.url.path, "method": request.method},
+        exc_info=True  # 🔑 esto imprime el traceback completo
+    )
+    return JSONResponse(status_code=500, content={"detail": "internal_error", "request_id": rid})
+
+@app.exception_handler(RequestValidationError)
+async def validation_exc_handler(request: Request, exc: RequestValidationError):
+    rid = get_request_id()
+    logger.warning(
+        "Validation error",
+        extra={"path": request.url.path, "method": request.method, "errors": exc.errors()},
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors(), "request_id": rid})
