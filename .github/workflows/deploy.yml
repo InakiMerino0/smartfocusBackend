@@ -2,7 +2,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   EC2_HOST: ec2-18-225-92-56.us-east-2.compute.amazonaws.com
@@ -28,13 +28,17 @@ jobs:
 
       - name: Generate .env (from Secrets) on runner
         run: |
-          cat > .env <<EOT
-DB_USER=${{ secrets.DB_USER }}
-DB_PASS=${{ secrets.DB_PASS }}
-DB_HOST=${{ secrets.DB_HOST }}
-DB_PORT=${{ secrets.DB_PORT }}
-DB_NAME=${{ secrets.DB_NAME }}
-EOT
+          : > .env
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASS=${{ secrets.DB_PASS }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> .env
+          echo "JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}" >> .env
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}" >> .env
 
       - name: Sync code to EC2 (exclude local .env)
         run: |
@@ -49,11 +53,11 @@ EOT
 
       - name: Rebuild & restart containers
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" <<'EOF'
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" "
             set -e
-            cd /home/ubuntu/SmartFocus
+            cd $APP_DIR
             docker compose down
             docker compose build --no-cache backend
             docker compose up -d --force-recreate --remove-orphans
             docker compose ps
-          EOF
+          "
