@@ -19,13 +19,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-    # Healthcheck del backend (apunta a /health que existe)
-    healthcheck:
-      test: ["CMD-SHELL", "python - <<'PY'\nimport sys,urllib.request\nu='http://127.0.0.1:8000/health'\ntry:\n  urllib.request.urlopen(u, timeout=3)\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)\nPY"]
-      interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
 
   db:
     image: postgres:15
