@@ -6,18 +6,20 @@ _request_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar("re
 
 class RequestIDFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.request_id = _request_id_ctx.get() or "-"
+        rid = _request_id_ctx.get() or "-"
+        setattr(record, "request_id", rid)
         return True
 
-def attach_request_id_filter():
-    root = logging.getLogger()
-    f = RequestIDFilter()
-    for h in root.handlers:
-        h.addFilter(f)
-    for name in ("smartfocus", "uvicorn.error", "uvicorn.access", "fastapi"):
-        lg = logging.getLogger(name)
-        for h in lg.handlers:
-            h.addFilter(f)
+class EnsureExtrasFilter(logging.Filter):
+    """Garantiza que path y method existan aunque el log no los pase en extra."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "request_id"):
+            setattr(record, "request_id", "-")
+        if not hasattr(record, "path"):
+            setattr(record, "path", "-")
+        if not hasattr(record, "method"):
+            setattr(record, "method", "-")
+        return True
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
