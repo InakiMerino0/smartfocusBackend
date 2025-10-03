@@ -12,7 +12,6 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -22,35 +21,35 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
       - name: Install rsync
         run: sudo apt-get update && sudo apt-get install -y rsync
 
-      - name: Sync code to EC2 (excluye .env)
+      - name: Generate .env (from Secrets) on runner
         run: |
-          rsync -az --delete --exclude='.env' \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
-            ./ $EC2_USER@$EC2_HOST:$APP_DIR/
-
-      - name: Create .env on EC2 from Secrets
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $EC2_USER@$EC2_HOST << 'EOF'
-            set -e
-            mkdir -p /home/ubuntu/SmartFocus
-            cat > /home/ubuntu/SmartFocus/.env << EOT
+          cat > .env <<EOT
 DB_USER=${{ secrets.DB_USER }}
 DB_PASS=${{ secrets.DB_PASS }}
 DB_HOST=${{ secrets.DB_HOST }}
 DB_PORT=${{ secrets.DB_PORT }}
 DB_NAME=${{ secrets.DB_NAME }}
 EOT
-            ls -la /home/ubuntu/SmartFocus/.env
-          EOF
+
+      - name: Sync code to EC2 (exclude local .env)
+        run: |
+          rsync -az --delete --exclude='.env' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            ./ "$EC2_USER@$EC2_HOST:$APP_DIR/"
+
+      - name: Upload .env to EC2
+        run: |
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes ./.env \
+            "$EC2_USER@$EC2_HOST:$APP_DIR/.env"
 
       - name: Rebuild & restart containers
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $EC2_USER@$EC2_HOST << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" <<'EOF'
             set -e
             cd /home/ubuntu/SmartFocus
             docker compose down
