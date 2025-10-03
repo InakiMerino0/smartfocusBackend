@@ -4,8 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
-from .logging_config import setup_logging
-from .observability import RequestIDMiddleware, get_request_id
+from smartfocusBackend.logging_config import setup_logging
+from smartfocusBackend.observability import RequestIDMiddleware, get_request_id
+
 
 setup_logging()
 

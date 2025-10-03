@@ -1,4 +1,5 @@
 version: "3.9"
+
 services:
   backend:
     build: ./backend
@@ -6,43 +7,43 @@ services:
     env_file:
       - .env
     environment:
+      # Necesario para que Python vea /app como raíz de módulos
+      PYTHONPATH: /app
+      # Si querés mantener este DATABASE_URL además del .env, dejalo; si no, podés borrarlo
       DATABASE_URL: postgresql://postgres:postgres@db:5432/smartfocus
-      # Si usás Uvicorn, asegúrate de exponer en 0.0.0.0:8000 dentro del contenedor
-      # Ej. CMD: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn smartfocusBackend.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
-    volumes:
-      - ./logs:/app/logs
-    # Healthcheck del backend -> usar /ready (readiness real que verifica DB)
+
+    # Healthcheck del backend (apunta a /health que existe)
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/ready'); sys.exit(0)\""]
-      interval: 5s       # chequea más seguido, detecta rápido
+      test: ["CMD-SHELL", "python - <<'PY'\nimport sys,urllib.request\nu='http://127.0.0.1:8000/health'\ntry:\n  urllib.request.urlopen(u, timeout=3)\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)\nPY"]
+      interval: 10s
       timeout: 3s
-      retries: 12        # da ~1 minuto total de gracia
-      start_period: 10s  # da tiempo a Uvicorn para bootear
+      retries: 12
+      start_period: 10s
 
   db:
     image: postgres:15
     container_name: smartfocus-db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: smartfocus
+      POSTGRES_USER: smartfocus
+      POSTGRES_PASSWORD: fbebidmr
+      POSTGRES_DB: smartfocus_db
     volumes:
       - db_data:/var/lib/postgresql/data
-    # Para producción, evitá exponer el puerto hacia afuera si solo lo usa el backend
     ports:
-      - "5432:5432"   # en dev viene bien; en prod podrías quitarlo
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d smartfocus"]
       interval: 5s
       timeout: 3s
-      retries: 20       # la primera inicialización de PG puede tardar
+      retries: 20
       start_period: 10s
 
   pgadmin:
@@ -50,8 +51,8 @@ services:
     container_name: smartfocus-pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: smartfocu@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
     ports:
       - "5050:80"
     volumes:
