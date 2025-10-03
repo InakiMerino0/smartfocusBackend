@@ -2,8 +2,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 env:
   EC2_HOST: ec2-18-225-92-56.us-east-2.compute.amazonaws.com
@@ -28,18 +27,40 @@ jobs:
       - name: Install rsync
         run: sudo apt-get update && sudo apt-get install -y rsync
 
-      - name: Copy code to EC2
+      - name: Sync code to EC2 (excluye .env)
         run: |
-          rsync -az --delete \
+          rsync -az --delete --exclude='.env' \
             -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
             ./ $EC2_USER@$EC2_HOST:$APP_DIR/
 
+      # ⚠️ Usamos ruta LITERAL en el server. Nada de $APP_DIR dentro del SSH.
+      - name: Create .env on EC2 from Secrets
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $EC2_USER@$EC2_HOST << 'EOF'
+            set -e
+            mkdir -p /home/ubuntu/SmartFocus
+            cat > /home/ubuntu/SmartFocus/.env << EOT
+DB_USER=${{ secrets.DB_USER }}
+DB_PASS=${{ secrets.DB_PASS }}
+DB_HOST=${{ secrets.DB_HOST }}
+DB_PORT=${{ secrets.DB_PORT }}
+DB_NAME=${{ secrets.DB_NAME }}
+JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
+ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
+GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
+EOT
+            ls -la /home/ubuntu/SmartFocus/.env
+          EOF
+
       - name: Rebuild & restart containers
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $EC2_USER@$EC2_HOST << EOF
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $EC2_USER@$EC2_HOST << 'EOF'
             set -e
             cd /home/ubuntu/SmartFocus
             docker compose down
             docker compose build --no-cache backend
             docker compose up -d --force-recreate --remove-orphans
+            docker compose ps
           EOF
