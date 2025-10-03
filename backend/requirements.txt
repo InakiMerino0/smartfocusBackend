@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
-psycopg2-binary
+pydantic[email]      # trae email-validator
 SQLAlchemy
-python-dotenv
-pydantic
+psycopg2-binary
+passlib[bcrypt]
+python-multipart
+python-jose[cryptography]
