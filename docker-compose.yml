@@ -24,8 +24,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: smartfocus
-      POSTGRES_PASSWORD: fbebidmr
-      POSTGRES_DB: smartfocus
+      POSTGRES_PASSWORD: fbebidim
+      POSTGRES_DB: smartfocus_db
     volumes:
       - db_data:/var/lib/postgresql/data
     # No expongas 5432 si no lo necesitas desde fuera de Docker
