@@ -35,12 +35,11 @@ def register_user(db: Session, payload: schemas.UsuarioCreate) -> schemas.Usuari
     db.commit()
     db.refresh(user)
 
-    # OJO: si tu modelo usa created_at (y no usuario_created_at),
-    # construimos la respuesta manualmente para calzar con el schema.
+    # Retornamos el schema usando el campo correcto 'usuario_created_at'.
     return schemas.UsuarioResponse(
         usuario_id=user.usuario_id,
         usuario_nombre=user.usuario_nombre,
         usuario_email=user.usuario_email,
-        usuario_created_at=getattr(user, "usuario_created_at", getattr(user, "created_at")),
+        usuario_created_at=user.usuario_created_at,
     )
     
