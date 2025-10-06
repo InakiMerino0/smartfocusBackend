@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -90,25 +91,49 @@ def nl_command(
           * si no, planifica y ejecuta en el mismo request.
     """
     try:
+        logging.info(f"nl_command: Procesando request - mode: {payload.mode}, text: '{payload.text}', usuario_id: {usuario.usuario_id}")
+        
         if payload.mode == "plan":
+            logging.info("nl_command: Ejecutando modo plan")
             plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
-            return svc.serialize_plan(plan)
+            result = svc.serialize_plan(plan)
+            logging.info(f"nl_command: Plan generado exitosamente con {len(result.get('actions', []))} acciones")
+            return result
 
         # execute
+        logging.info("nl_command: Ejecutando modo execute")
+        
         if payload.actions:
+            logging.info(f"nl_command: Usando acciones predefinidas ({len(payload.actions)} acciones)")
             actions = svc.deserialize_actions(payload.actions)
         else:
+            logging.info("nl_command: Generando plan para ejecutar")
             plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
             actions = plan.actions
+            logging.info(f"nl_command: Plan generado con {len(actions)} acciones para ejecutar")
 
-        results = svc.execute_actions(db, usuario.usuario_id, actions)
+        # Filtrar solo acciones permitidas
+        allowed_actions = [a for a in actions if getattr(a, 'allow', True)]
+        logging.info(f"nl_command: {len(allowed_actions)} de {len(actions)} acciones permitidas para ejecución")
+        
+        if not allowed_actions:
+            logging.warning("nl_command: No hay acciones permitidas para ejecutar")
+            return {"summary": "No hay acciones válidas para ejecutar", "results": []}
+
+        logging.info(f"nl_command: Ejecutando {len(allowed_actions)} acciones")
+        results = svc.execute_actions(db, usuario.usuario_id, allowed_actions)
+        logging.info(f"nl_command: Ejecución completada, {len(results)} resultados")
+        
         summary = "Acciones ejecutadas:\n" + "\n".join(f"- {r.get('kind')}" for r in results) if results else "Sin cambios."
 
         return {"summary": summary, "results": results}
 
     except PermissionError as e:
+        logging.error(f"nl_command: Error de permisos: {str(e)}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
+        logging.error(f"nl_command: Error de validación: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error procesando la orden")
+    except Exception as e:
+        logging.error(f"nl_command: Error interno: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error procesando la orden: {str(e)}")

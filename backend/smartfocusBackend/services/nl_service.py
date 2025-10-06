@@ -343,41 +343,75 @@ def execute_actions(
     Ejecuta las acciones usando los servicios de dominio.
     Retorna una lista de resultados serializables.
     """
+    logging.info(f"execute_actions: Ejecutando {len(actions)} acciones para usuario {usuario_id}")
     results: List[Dict[str, Any]] = []
 
-    for a in actions:
-        if a.kind == "create_materia":
-            payload = schemas.MateriaCreate(**a.args)
-            m = subject_service.create_subject(db, usuario_id, payload)
-            results.append({"kind": a.kind, "materia": m})
+    for i, a in enumerate(actions):
+        try:
+            logging.info(f"execute_actions: Procesando acción {i+1}/{len(actions)}: {a.kind}")
+            
+            # Verificar que la acción esté permitida
+            if not getattr(a, 'allow', True):
+                logging.warning(f"execute_actions: Acción {a.kind} no permitida, saltando")
+                continue
 
-        elif a.kind == "update_materia":
-            mid = a.args.pop("materia_id")
-            payload = schemas.MateriaUpdate(**a.args)
-            m = subject_service.update_subject(db, usuario_id, mid, payload)
-            results.append({"kind": a.kind, "materia": m})
+            if a.kind == "create_materia":
+                logging.info(f"execute_actions: Creando materia con args: {a.args}")
+                payload = schemas.MateriaCreate(**a.args)
+                m = subject_service.create_subject(db, usuario_id, payload)
+                results.append({"kind": a.kind, "materia": m})
+                logging.info(f"execute_actions: Materia creada exitosamente: {m}")
 
-        elif a.kind == "delete_materia":
-            mid = a.args["materia_id"]
-            subject_service.delete_subject(db, usuario_id, mid)
-            results.append({"kind": a.kind, "deleted": {"materia_id": mid}})
+            elif a.kind == "update_materia":
+                # Hacer copia de args para no modificar el original
+                args_copy = a.args.copy()
+                mid = args_copy.pop("materia_id")
+                logging.info(f"execute_actions: Actualizando materia {mid} con args: {args_copy}")
+                payload = schemas.MateriaUpdate(**args_copy)
+                m = subject_service.update_subject(db, usuario_id, mid, payload)
+                results.append({"kind": a.kind, "materia": m})
+                logging.info(f"execute_actions: Materia actualizada exitosamente: {m}")
 
-        elif a.kind == "create_evento":
-            payload = schemas.EventoCreate(**a.args)
-            e = event_service.create_event(db, usuario_id, payload)
-            results.append({"kind": a.kind, "evento": e})
+            elif a.kind == "delete_materia":
+                mid = a.args["materia_id"]
+                logging.info(f"execute_actions: Eliminando materia {mid}")
+                subject_service.delete_subject(db, usuario_id, mid)
+                results.append({"kind": a.kind, "deleted": {"materia_id": mid}})
+                logging.info(f"execute_actions: Materia {mid} eliminada exitosamente")
 
-        elif a.kind == "update_evento":
-            evid = a.args.pop("evento_id")
-            payload = schemas.EventoUpdate(**a.args)
-            e = event_service.update_event(db, usuario_id, evid, payload)
-            results.append({"kind": a.kind, "evento": e})
+            elif a.kind == "create_evento":
+                logging.info(f"execute_actions: Creando evento con args: {a.args}")
+                payload = schemas.EventoCreate(**a.args)
+                e = event_service.create_event(db, usuario_id, payload)
+                results.append({"kind": a.kind, "evento": e})
+                logging.info(f"execute_actions: Evento creado exitosamente: {e}")
 
-        elif a.kind == "delete_evento":
-            evid = a.args["evento_id"]
-            event_service.delete_event(db, usuario_id, evid)
-            results.append({"kind": a.kind, "deleted": {"evento_id": evid}})
+            elif a.kind == "update_evento":
+                # Hacer copia de args para no modificar el original
+                args_copy = a.args.copy()
+                evid = args_copy.pop("evento_id")
+                logging.info(f"execute_actions: Actualizando evento {evid} con args: {args_copy}")
+                payload = schemas.EventoUpdate(**args_copy)
+                e = event_service.update_event(db, usuario_id, evid, payload)
+                results.append({"kind": a.kind, "evento": e})
+                logging.info(f"execute_actions: Evento actualizado exitosamente: {e}")
 
+            elif a.kind == "delete_evento":
+                evid = a.args["evento_id"]
+                logging.info(f"execute_actions: Eliminando evento {evid}")
+                event_service.delete_event(db, usuario_id, evid)
+                results.append({"kind": a.kind, "deleted": {"evento_id": evid}})
+                logging.info(f"execute_actions: Evento {evid} eliminado exitosamente")
+                
+            else:
+                logging.warning(f"execute_actions: Tipo de acción desconocido: {a.kind}")
+                
+        except Exception as e:
+            logging.error(f"execute_actions: Error ejecutando acción {a.kind}: {str(e)}", exc_info=True)
+            # Continuamos con las siguientes acciones en lugar de fallar completamente
+            continue
+
+    logging.info(f"execute_actions: Ejecución completada, {len(results)} acciones ejecutadas exitosamente")
     return results
 
 
