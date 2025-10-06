@@ -1,9 +1,16 @@
+import logging
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from .database import get_db
 from sqlalchemy import text
 from .routers import v1_auth, v1_events, v1_nl, v1_subjects, v1_users
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = FastAPI(
     title="SmartFocus Backend",

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from typing import Any, Dict, List, Optional
 
 # Hacemos el import "suave" para no romper en dev si la lib no está instalada
@@ -30,6 +31,7 @@ class GeminiClient:
             raise RuntimeError("GEMINI_API_KEY no configurada.")
 
         genai.configure(api_key=api_key)
+        logging.info(f"GeminiClient: API configurada exitosamente con modelo {model_name or os.getenv('GEMINI_MODEL', 'gemini-1.5-pro')}")
 
         self.model = genai.GenerativeModel(
             model_name=model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
@@ -48,11 +50,14 @@ class GeminiClient:
         [{ "name": "...", "args": {...} }, ...]
         """
         prompt = f"[locale={locale}] {text}".strip()
+        logging.info(f"GeminiClient: Enviando prompt a Gemini API: {text[:100]}...")
         try:
             resp = self.model.generate_content(prompt)
-            return _parse_tool_calls(resp)
-        except Exception:
-            # En producción, registra el error con tu logger; aquí devolvemos vacío para no romper el flujo.
+            tool_calls = _parse_tool_calls(resp)
+            logging.info(f"GeminiClient: Recibidas {len(tool_calls)} tool calls de Gemini API")
+            return tool_calls
+        except Exception as e:
+            logging.error(f"GeminiClient: Error al generar contenido con Gemini API: {str(e)}")
             return []
 
 
@@ -113,7 +118,7 @@ def _tools_definitions() -> List[Dict[str, Any]]:
                         "evento_estado": {
                             "type": "string",
                             "enum": ["pendiente", "aprobado", "desaprobado"],
-                            "default": "pendiente",
+                            "description": "Estado del evento (por defecto: pendiente)",
                         },
                     },
                     "required": ["evento_nombre", "evento_fecha"],
