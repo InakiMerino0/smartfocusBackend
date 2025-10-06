@@ -31,7 +31,7 @@ class GeminiClient:
             raise RuntimeError("GEMINI_API_KEY no configurada.")
 
         # Configurar el nombre del modelo con validación
-        model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-pro-latest")
+        model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         if not model_name or model_name == "":
             model_name = "gemini-1.5-pro-latest"
         
