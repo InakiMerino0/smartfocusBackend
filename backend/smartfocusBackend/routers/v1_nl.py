@@ -105,7 +105,13 @@ def nl_command(
         
         if payload.actions:
             logging.info(f"nl_command: Usando acciones predefinidas ({len(payload.actions)} acciones)")
-            actions = svc.deserialize_actions(payload.actions)
+            logging.info(f"nl_command: Formato de acciones recibidas: {payload.actions}")
+            try:
+                actions = svc.deserialize_actions(payload.actions)
+                logging.info(f"nl_command: Acciones deserializadas exitosamente: {[a.kind for a in actions]}")
+            except Exception as e:
+                logging.error(f"nl_command: Error deserializando acciones: {str(e)}")
+                raise ValueError(f"Formato de acciones inválido: {str(e)}")
         else:
             logging.info("nl_command: Generando plan para ejecutar")
             plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)

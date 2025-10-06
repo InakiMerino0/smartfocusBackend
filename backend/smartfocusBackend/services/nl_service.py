@@ -433,4 +433,41 @@ def serialize_plan(plan: PlanResult) -> Dict[str, Any]:
     }
 
 def deserialize_actions(items: List[Dict[str, Any]]) -> List[PlannedAction]:
-    return [PlannedAction(kind=i["kind"], args=i["args"], description=i.get("description", "")) for i in items]
+    """Deserializa acciones desde el formato JSON a PlannedAction"""
+    logging.info(f"deserialize_actions: Deserializando {len(items)} acciones")
+    result = []
+    
+    for i, item in enumerate(items):
+        try:
+            logging.info(f"deserialize_actions: Procesando acción {i}: {item}")
+            
+            # Validar campos requeridos
+            if "kind" not in item:
+                raise ValueError(f"Acción {i} falta campo 'kind'. Campos disponibles: {list(item.keys())}")
+            if "args" not in item:
+                raise ValueError(f"Acción {i} falta campo 'args'. Campos disponibles: {list(item.keys())}")
+                
+            action = PlannedAction(
+                kind=item["kind"], 
+                args=item["args"], 
+                description=item.get("description", "")
+            )
+            
+            # Preservar atributos adicionales si existen
+            if "allow" in item:
+                action.allow = item["allow"]
+            if "resolved" in item:
+                action.resolved = item["resolved"]
+            if "conflict" in item:
+                action.conflict = item["conflict"]
+                
+            result.append(action)
+            logging.info(f"deserialize_actions: Acción {i} deserializada exitosamente: {action.kind}")
+            
+        except Exception as e:
+            logging.error(f"deserialize_actions: Error procesando acción {i}: {str(e)}")
+            logging.error(f"deserialize_actions: Formato de acción inválido: {item}")
+            raise ValueError(f"Error en acción {i}: {str(e)}. Formato esperado: {{\"kind\": \"create_materia\", \"args\": {{...}}, \"description\": \"...\", \"allow\": true}}")
+    
+    logging.info(f"deserialize_actions: {len(result)} acciones deserializadas exitosamente")
+    return result
