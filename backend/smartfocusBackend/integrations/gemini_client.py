@@ -30,37 +30,62 @@ class GeminiClient:
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY no configurada.")
 
+        # Configurar el nombre del modelo con validación
+        model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-pro-latest")
+        if not model_name or model_name == "":
+            model_name = "gemini-1.5-pro-latest"
+        
+        # Validar que el modelo tenga un formato correcto
+        valid_models = [
+            "gemini-1.5-pro-latest",
+            "gemini-1.5-pro",
+            "gemini-1.5-flash-latest", 
+            "gemini-1.5-flash",
+            "gemini-pro"
+        ]
+        
+        if model_name not in valid_models:
+            logging.warning(f"GeminiClient: Modelo '{model_name}' no está en la lista de modelos válidos. Usando gemini-1.5-pro-latest por defecto.")
+            model_name = "gemini-1.5-pro-latest"
+        
+        logging.info(f"GeminiClient: Configurando con modelo '{model_name}'")
+        
         genai.configure(api_key=api_key)
-        logging.info(f"GeminiClient: API configurada exitosamente con modelo {model_name or os.getenv('GEMINI_MODEL', 'gemini-1.5-pro')}")
+        logging.info(f"GeminiClient: API configurada exitosamente")
 
         tools = _tools_definitions()
         logging.info(f"GeminiClient: Configurando {len(tools[0]['function_declarations'])} herramientas")
         
-        self.model = genai.GenerativeModel(
-            model_name=model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
-            tools=tools,
-            system_instruction=(
-                "Eres un asistente especializado en gestión académica. Tu tarea es analizar las instrucciones "
-                "del usuario y SIEMPRE usar las funciones (tools) disponibles para realizar las acciones solicitadas. "
-                "\n\nFunciones disponibles:"
-                "\n- create_materia: crear nuevas materias"
-                "\n- update_materia: modificar materias existentes"
-                "\n- delete_materia: eliminar materias"
-                "\n- create_evento: crear eventos (exámenes, parciales, etc.)"
-                "\n- update_evento: modificar eventos existentes"
-                "\n- delete_evento: eliminar eventos"
-                "\n\nREGLAS IMPORTANTES:"
-                "\n1. SIEMPRE usa function calls para responder a las solicitudes del usuario"
-                "\n2. Si el usuario menciona una materia por nombre (sin ID), usa 'materia_ref'"
-                "\n3. Las fechas deben estar en formato ISO 'YYYY-MM-DD'"
-                "\n4. Para eventos, usa estado 'pendiente' si no se especifica otro"
-                "\n5. NO respondas con texto normal, SOLO usa function calls"
-                "\n\nEjemplos:"
-                "\n- 'crear materia matemáticas' → usar create_materia"
-                "\n- 'agregar examen de física para mañana' → usar create_evento"
-                "\n- 'cambiar el nombre de la materia historia' → usar update_materia"
-            ),
-        )
+        try:
+            self.model = genai.GenerativeModel(
+                model_name=model_name,
+                tools=tools,
+                system_instruction=(
+                    "Eres un asistente especializado en gestión académica. Tu tarea es analizar las instrucciones "
+                    "del usuario y SIEMPRE usar las funciones (tools) disponibles para realizar las acciones solicitadas. "
+                    "\n\nFunciones disponibles:"
+                    "\n- create_materia: crear nuevas materias"
+                    "\n- update_materia: modificar materias existentes"
+                    "\n- delete_materia: eliminar materias"
+                    "\n- create_evento: crear eventos (exámenes, parciales, etc.)"
+                    "\n- update_evento: modificar eventos existentes"
+                    "\n- delete_evento: eliminar eventos"
+                    "\n\nREGLAS IMPORTANTES:"
+                    "\n1. SIEMPRE usa function calls para responder a las solicitudes del usuario"
+                    "\n2. Si el usuario menciona una materia por nombre (sin ID), usa 'materia_ref'"
+                    "\n3. Las fechas deben estar en formato ISO 'YYYY-MM-DD'"
+                    "\n4. Para eventos, usa estado 'pendiente' si no se especifica otro"
+                    "\n5. NO respondas con texto normal, SOLO usa function calls"
+                    "\n\nEjemplos:"
+                    "\n- 'crear materia matemáticas' → usar create_materia"
+                    "\n- 'agregar examen de física para mañana' → usar create_evento"
+                    "\n- 'cambiar el nombre de la materia historia' → usar update_materia"
+                ),
+            )
+            logging.info(f"GeminiClient: Modelo '{model_name}' configurado exitosamente con {len(tools[0]['function_declarations'])} herramientas")
+        except Exception as e:
+            logging.error(f"GeminiClient: Error configurando modelo '{model_name}': {str(e)}")
+            raise RuntimeError(f"Error configurando modelo Gemini: {str(e)}")
 
     def get_tool_calls(self, text: str, *, locale: str = "es-AR") -> List[Dict[str, Any]]:
         """
