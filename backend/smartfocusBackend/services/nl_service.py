@@ -359,8 +359,16 @@ def execute_actions(
                 logging.info(f"execute_actions: Creando materia con args: {a.args}")
                 payload = schemas.MateriaCreate(**a.args)
                 m = subject_service.create_subject(db, usuario_id, payload)
-                results.append({"kind": a.kind, "materia": m})
-                logging.info(f"execute_actions: Materia creada exitosamente: {m}")
+                # Convertir el objeto ORM a diccionario serializable
+                materia_dict = {
+                    "materia_id": m.materia_id,
+                    "materia_nombre": m.materia_nombre,
+                    "materia_descripcion": m.materia_descripcion,
+                    "materia_usuario_id": m.materia_usuario_id,
+                    "materia_created_at": m.materia_created_at.isoformat() if m.materia_created_at else None
+                }
+                results.append({"kind": a.kind, "materia": materia_dict})
+                logging.info(f"execute_actions: Materia creada exitosamente: {materia_dict}")
 
             elif a.kind == "update_materia":
                 # Hacer copia de args para no modificar el original
@@ -369,8 +377,16 @@ def execute_actions(
                 logging.info(f"execute_actions: Actualizando materia {mid} con args: {args_copy}")
                 payload = schemas.MateriaUpdate(**args_copy)
                 m = subject_service.update_subject(db, usuario_id, mid, payload)
-                results.append({"kind": a.kind, "materia": m})
-                logging.info(f"execute_actions: Materia actualizada exitosamente: {m}")
+                # Convertir el objeto ORM a diccionario serializable
+                materia_dict = {
+                    "materia_id": m.materia_id,
+                    "materia_nombre": m.materia_nombre,
+                    "materia_descripcion": m.materia_descripcion,
+                    "materia_usuario_id": m.materia_usuario_id,
+                    "materia_created_at": m.materia_created_at.isoformat() if m.materia_created_at else None
+                }
+                results.append({"kind": a.kind, "materia": materia_dict})
+                logging.info(f"execute_actions: Materia actualizada exitosamente: {materia_dict}")
 
             elif a.kind == "delete_materia":
                 mid = a.args["materia_id"]
@@ -383,8 +399,17 @@ def execute_actions(
                 logging.info(f"execute_actions: Creando evento con args: {a.args}")
                 payload = schemas.EventoCreate(**a.args)
                 e = event_service.create_event(db, usuario_id, payload)
-                results.append({"kind": a.kind, "evento": e})
-                logging.info(f"execute_actions: Evento creado exitosamente: {e}")
+                # Convertir el objeto ORM a diccionario serializable
+                evento_dict = {
+                    "evento_id": e.evento_id,
+                    "evento_nombre": e.evento_nombre,
+                    "evento_fecha": e.evento_fecha.isoformat() if e.evento_fecha else None,
+                    "evento_estado": e.evento_estado,
+                    "evento_materia_id": e.evento_materia_id,
+                    "evento_created_at": e.evento_created_at.isoformat() if e.evento_created_at else None
+                }
+                results.append({"kind": a.kind, "evento": evento_dict})
+                logging.info(f"execute_actions: Evento creado exitosamente: {evento_dict}")
 
             elif a.kind == "update_evento":
                 # Hacer copia de args para no modificar el original
@@ -393,8 +418,17 @@ def execute_actions(
                 logging.info(f"execute_actions: Actualizando evento {evid} con args: {args_copy}")
                 payload = schemas.EventoUpdate(**args_copy)
                 e = event_service.update_event(db, usuario_id, evid, payload)
-                results.append({"kind": a.kind, "evento": e})
-                logging.info(f"execute_actions: Evento actualizado exitosamente: {e}")
+                # Convertir el objeto ORM a diccionario serializable
+                evento_dict = {
+                    "evento_id": e.evento_id,
+                    "evento_nombre": e.evento_nombre,
+                    "evento_fecha": e.evento_fecha.isoformat() if e.evento_fecha else None,
+                    "evento_estado": e.evento_estado,
+                    "evento_materia_id": e.evento_materia_id,
+                    "evento_created_at": e.evento_created_at.isoformat() if e.evento_created_at else None
+                }
+                results.append({"kind": a.kind, "evento": evento_dict})
+                logging.info(f"execute_actions: Evento actualizado exitosamente: {evento_dict}")
 
             elif a.kind == "delete_evento":
                 evid = a.args["evento_id"]
