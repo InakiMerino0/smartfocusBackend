@@ -33,12 +33,12 @@ class GeminiClient:
         # Configurar el nombre del modelo con validación
         model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
         if not model_name or model_name == "":
-            model_name = "gemini-1.5-pro-latest"
+            model_name = "gemini-2.5-pro"
         
         # Validar que el modelo tenga un formato correcto
         valid_models = [
-            "gemini-1.5-pro-latest",
-            "gemini-1.5-pro",
+            "gemini-2.5-pro-latest",
+            "gemini-2.5-pro",
             "gemini-1.5-flash-latest", 
             "gemini-1.5-flash",
             "gemini-pro"
