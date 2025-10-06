@@ -1,6 +1,7 @@
 # services/nl_service.py
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
 from datetime import date
@@ -73,6 +74,7 @@ def _normalize_tool_call(
     """
     name = raw.get("name")
     args = raw.get("args") or {}
+    logging.info(f"_normalize_tool_call: Procesando tool '{name}' con args: {args}")
     out: List[PlannedAction] = []
 
     # helpers para mapear referencia de materia
@@ -215,11 +217,17 @@ def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResul
     Anota cada acción con: a.allow (bool), a.resolved (dict), a.conflict (str|None)
     y construye un summary legible.
     """
+    logging.info(f"plan_actions: Procesando texto del usuario: '{user_text}'")
+    
     # 1) tool calls -> acciones normalizadas
     tool_calls = llm.get_tool_calls(user_text, locale="es-AR")
+    logging.info(f"plan_actions: Recibidas {len(tool_calls)} tool calls: {tool_calls}")
+    
     actions: List[PlannedAction] = []
     for call in tool_calls:
-        actions.extend(_normalize_tool_call(call, db, usuario_id))
+        normalized_actions = _normalize_tool_call(call, db, usuario_id)
+        logging.info(f"plan_actions: Tool call '{call.get('name')}' generó {len(normalized_actions)} acciones normalizadas")
+        actions.extend(normalized_actions)
 
     # 2) verificación de existencias + regla de negocio (allow/conflict/resolved)
     def _find_materia_by_name(uid: int, nombre: str) -> Optional[models.Materia]:
@@ -244,6 +252,7 @@ def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResul
 
     summary_lines: List[str] = []
     if not actions:
+        logging.warning(f"plan_actions: No se generaron acciones para el texto '{user_text}'. Tool calls recibidas: {tool_calls}")
         return PlanResult(actions=[], summary="No se detectaron acciones. Podés reformular o ser más específico.")
 
     for a in actions:

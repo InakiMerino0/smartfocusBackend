@@ -33,14 +33,32 @@ class GeminiClient:
         genai.configure(api_key=api_key)
         logging.info(f"GeminiClient: API configurada exitosamente con modelo {model_name or os.getenv('GEMINI_MODEL', 'gemini-1.5-pro')}")
 
+        tools = _tools_definitions()
+        logging.info(f"GeminiClient: Configurando {len(tools[0]['function_declarations'])} herramientas")
+        
         self.model = genai.GenerativeModel(
             model_name=model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
-            tools=_tools_definitions(),
+            tools=tools,
             system_instruction=(
-                "Eres un asistente que transforma instrucciones en lenguaje natural en llamadas a funciones "
-                "(tools) para gestionar materias y eventos. Devuelve SOLO function calls válidos con argumentos "
-                "correctos. No inventes IDs; si el usuario menciona una materia por nombre, usa 'materia_ref'. "
-                "Las fechas deben estar en formato ISO 'YYYY-MM-DD'."
+                "Eres un asistente especializado en gestión académica. Tu tarea es analizar las instrucciones "
+                "del usuario y SIEMPRE usar las funciones (tools) disponibles para realizar las acciones solicitadas. "
+                "\n\nFunciones disponibles:"
+                "\n- create_materia: crear nuevas materias"
+                "\n- update_materia: modificar materias existentes"
+                "\n- delete_materia: eliminar materias"
+                "\n- create_evento: crear eventos (exámenes, parciales, etc.)"
+                "\n- update_evento: modificar eventos existentes"
+                "\n- delete_evento: eliminar eventos"
+                "\n\nREGLAS IMPORTANTES:"
+                "\n1. SIEMPRE usa function calls para responder a las solicitudes del usuario"
+                "\n2. Si el usuario menciona una materia por nombre (sin ID), usa 'materia_ref'"
+                "\n3. Las fechas deben estar en formato ISO 'YYYY-MM-DD'"
+                "\n4. Para eventos, usa estado 'pendiente' si no se especifica otro"
+                "\n5. NO respondas con texto normal, SOLO usa function calls"
+                "\n\nEjemplos:"
+                "\n- 'crear materia matemáticas' → usar create_materia"
+                "\n- 'agregar examen de física para mañana' → usar create_evento"
+                "\n- 'cambiar el nombre de la materia historia' → usar update_materia"
             ),
         )
 
@@ -53,12 +71,33 @@ class GeminiClient:
         logging.info(f"GeminiClient: Enviando prompt a Gemini API: {text[:100]}...")
         try:
             resp = self.model.generate_content(prompt)
+            logging.info(f"GeminiClient: Respuesta recibida de Gemini API")
+            
+            # Debug: mostrar la respuesta completa
+            if hasattr(resp, 'candidates') and resp.candidates:
+                for i, candidate in enumerate(resp.candidates):
+                    logging.info(f"GeminiClient: Candidato {i}: {candidate}")
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts'):
+                            for j, part in enumerate(candidate.content.parts):
+                                logging.info(f"GeminiClient: Parte {j}: {part}")
+            
             tool_calls = _parse_tool_calls(resp)
             logging.info(f"GeminiClient: Recibidas {len(tool_calls)} tool calls de Gemini API")
             return tool_calls
         except Exception as e:
             logging.error(f"GeminiClient: Error al generar contenido con Gemini API: {str(e)}")
             return []
+
+    def debug_prompt(self, text: str) -> str:
+        """
+        Método de debug para ver exactamente qué está respondiendo Gemini
+        """
+        try:
+            resp = self.model.generate_content(text)
+            return str(resp)
+        except Exception as e:
+            return f"Error: {str(e)}"
 
 
 def _tools_definitions() -> List[Dict[str, Any]]:
@@ -162,16 +201,45 @@ def _parse_tool_calls(resp) -> List[Dict[str, Any]]:
     Ignora candidatos sin function_call.
     """
     out: List[Dict[str, Any]] = []
+    logging.info(f"_parse_tool_calls: Procesando respuesta de Gemini API")
+    
     try:
         candidates = getattr(resp, "candidates", None) or []
-        for cand in candidates:
+        logging.info(f"_parse_tool_calls: Encontrados {len(candidates)} candidatos")
+        
+        for i, cand in enumerate(candidates):
+            logging.info(f"_parse_tool_calls: Procesando candidato {i}")
             content = getattr(cand, "content", None)
+            if not content:
+                logging.warning(f"_parse_tool_calls: Candidato {i} sin contenido")
+                continue
+                
             parts = getattr(content, "parts", None) or []
-            for p in parts:
+            logging.info(f"_parse_tool_calls: Candidato {i} tiene {len(parts)} partes")
+            
+            for j, p in enumerate(parts):
+                logging.info(f"_parse_tool_calls: Procesando parte {j} del candidato {i}")
                 fc = getattr(p, "function_call", None)
-                if fc and getattr(fc, "name", None):
-                    args = dict(fc.args) if hasattr(fc.args, "items") else (fc.args or {})
-                    out.append({"name": fc.name, "args": args})
-    except Exception:
+                
+                if fc:
+                    name = getattr(fc, "name", None)
+                    if name:
+                        args = dict(fc.args) if hasattr(fc.args, "items") else (fc.args or {})
+                        logging.info(f"_parse_tool_calls: Encontrada function_call '{name}' con args: {args}")
+                        out.append({"name": name, "args": args})
+                    else:
+                        logging.warning(f"_parse_tool_calls: function_call sin nombre en parte {j}")
+                else:
+                    # Verificar si hay texto normal en lugar de function_call
+                    text = getattr(p, "text", None)
+                    if text:
+                        logging.info(f"_parse_tool_calls: Parte {j} contiene texto: {text[:100]}...")
+                    else:
+                        logging.info(f"_parse_tool_calls: Parte {j} sin function_call ni texto")
+                        
+    except Exception as e:
+        logging.error(f"_parse_tool_calls: Error parseando respuesta: {str(e)}")
         return []
+    
+    logging.info(f"_parse_tool_calls: Retornando {len(out)} tool calls")
     return out

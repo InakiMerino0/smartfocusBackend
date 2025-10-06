@@ -40,6 +40,32 @@ def get_llm_client() -> GeminiClient:
 
 
 @router.post(
+    "/debug",
+    summary="Endpoint para debuggear respuestas de Gemini",
+)
+def debug_gemini(
+    text: str,
+    llm: GeminiClient = Depends(get_llm_client),
+):
+    """
+    Endpoint temporal para debuggear qué está respondiendo Gemini
+    """
+    try:
+        # Probar directamente la respuesta de Gemini
+        raw_response = llm.debug_prompt(text)
+        tool_calls = llm.get_tool_calls(text)
+        
+        return {
+            "input_text": text,
+            "raw_response": raw_response,
+            "tool_calls": tool_calls,
+            "tool_calls_count": len(tool_calls)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post(
     "/command",
     response_model=Dict[str, Any],
     summary="Procesa una orden en lenguaje natural (plan / execute)",
