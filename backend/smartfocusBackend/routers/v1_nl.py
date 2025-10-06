@@ -21,7 +21,11 @@ class NLCommandRequest(BaseModel):
     """
     text: str = Field(..., min_length=1, description="Instrucción del usuario en lenguaje natural")
     mode: Literal["plan", "execute"] = "plan"
-    actions: Optional[List[Dict[str, Any]]] = None  # acciones opcionales (de un plan previo)
+    actions: Optional[List[Dict[str, Any]]] = Field(
+        None, 
+        description="Acciones opcionales (de un plan previo). Para execute directo, dejar vacío.",
+        example=None
+    )
 
 class NLPlanResponse(BaseModel):
     summary: str
@@ -104,14 +108,22 @@ def nl_command(
         logging.info("nl_command: Ejecutando modo execute")
         
         if payload.actions:
-            logging.info(f"nl_command: Usando acciones predefinidas ({len(payload.actions)} acciones)")
-            logging.info(f"nl_command: Formato de acciones recibidas: {payload.actions}")
-            try:
-                actions = svc.deserialize_actions(payload.actions)
-                logging.info(f"nl_command: Acciones deserializadas exitosamente: {[a.kind for a in actions]}")
-            except Exception as e:
-                logging.error(f"nl_command: Error deserializando acciones: {str(e)}")
-                raise ValueError(f"Formato de acciones inválido: {str(e)}")
+            # Verificar si son acciones de ejemplo de Swagger
+            if len(payload.actions) == 1 and "additionalProp1" in payload.actions[0]:
+                logging.warning("nl_command: Detectadas acciones de ejemplo de Swagger, ignorando y generando plan automáticamente")
+                logging.info("nl_command: Generando plan para ejecutar")
+                plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
+                actions = plan.actions
+                logging.info(f"nl_command: Plan generado con {len(actions)} acciones para ejecutar")
+            else:
+                logging.info(f"nl_command: Usando acciones predefinidas ({len(payload.actions)} acciones)")
+                logging.info(f"nl_command: Formato de acciones recibidas: {payload.actions}")
+                try:
+                    actions = svc.deserialize_actions(payload.actions)
+                    logging.info(f"nl_command: Acciones deserializadas exitosamente: {[a.kind for a in actions]}")
+                except Exception as e:
+                    logging.error(f"nl_command: Error deserializando acciones: {str(e)}")
+                    raise ValueError(f"Formato de acciones inválido: {str(e)}")
         else:
             logging.info("nl_command: Generando plan para ejecutar")
             plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
