@@ -265,13 +265,16 @@ def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResul
 
         if kind == "create_materia":
             nombre = args.get("materia_nombre", "")
+            logging.info(f"plan_actions: Verificando si materia '{nombre}' ya existe para usuario {usuario_id}")
             m = _find_materia_by_name(usuario_id, nombre) if nombre else None
             a.resolved["materia_id"] = m.materia_id if m else None
             if m:
                 a.allow = False
                 a.conflict = "Materia ya existe; solo se permite update/delete."
+                logging.warning(f"plan_actions: Materia '{nombre}' ya existe (id={m.materia_id}), bloqueando creación")
                 summary_lines.append(f"✖ Crear materia '{nombre}': ya existe (id={m.materia_id}).")
             else:
+                logging.info(f"plan_actions: Materia '{nombre}' no existe, permitiendo creación")
                 summary_lines.append(f"✔ Crear materia '{nombre}': permitido (no existe).")
 
         elif kind in ("update_materia", "delete_materia"):
