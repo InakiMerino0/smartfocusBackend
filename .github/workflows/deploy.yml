@@ -4,17 +4,15 @@ on:
   push:
     branches: ["main"]
 
-# ✅ El token del workflow puede publicar a GHCR en el owner del repo (tu usuario)
+# Permisos necesarios para poder publicar la imagen al GHCR
 permissions:
   contents: read
   packages: write
 
 env:
-  # Publica bajo el dueño real del repo (tu user). Evita typos.
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/smartfocus-backend
-  # HARD-CODE: DNS público de tu EC2 (actualizalo si cambia)
+  # HARD-CODE: DNS público de tu instancia EC2
   EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com
-  # Usuario SSH típico en Ubuntu
+  # Usuario SSH (en Amazon Linux o Ubuntu es "ubuntu")
   EC2_USER: ubuntu
 
 concurrency:
@@ -29,11 +27,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ✅ Forzamos a minúsculas el nombre de imagen
+      - name: Compute lowercase IMAGE_NAME
+        run: |
+          echo "IMAGE_NAME=$(echo ghcr.io/${{ github.repository_owner }}/smartfocus-backend | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       # ---------- CI: Build & Push ----------
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR (GITHUB_TOKEN con packages:write)
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -86,6 +89,7 @@ jobs:
         run: |
           ssh -i <(printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}") -o StrictHostKeyChecking=yes ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOSSH'
           set -euo pipefail
+
           cd /home/${USER}/SmartFocus
 
           # Asegurar permisos del .env
@@ -95,7 +99,7 @@ jobs:
           # Login a GHCR con token de SOLO LECTURA (PAT read:packages)
           echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 
-          # Variables para docker-compose (image + tag inmutable)
+          # Variables para docker-compose (imagen + tag inmutable)
           export IMAGE_NAME="${IMAGE_NAME}"
           export IMAGE_TAG="sha-${GITHUB_SHA}"
 
@@ -111,5 +115,5 @@ jobs:
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           GITHUB_SHA: ${{ github.sha }}
-          GHCR_USER: InakiMerino0                # <- TU usuario GH
+          GHCR_USER: InakiMerino0                # <- tu usuario GH (minúsculas en login no importa)
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}  # <- PAT con read:packages
