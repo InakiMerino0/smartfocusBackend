@@ -1,58 +1,53 @@
-version: "3.9"
-
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    # No publiques 5432 en prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
-    build: ./backend
-    container_name: smartfocus-backend
+    # Imagen publicada en tu registry (GHCR). Ajustá "tuusuario"
+    image: ${IMAGE_NAME:-ghcr.io/tuusuario/smartfocus-backend}:${IMAGE_TAG:-latest}
     env_file:
       - .env
     environment:
+      # Construimos la URL desde tu .env (DB_*)
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME}
       PYTHONPATH: /app
-      # Mejor: deja que .env defina DATABASE_URL y quita esta línea
-      # DATABASE_URL: postgresql+psycopg2://smartfocus:fbebidmr@db:5432/smartfocus
-    command: uvicorn smartfocusBackend.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
+    # Hardening + límites
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: "512m"
+    cpus: "0.50"
     restart: unless-stopped
 
-  db:
-    image: postgres:15
-    container_name: smartfocus-db
-    restart: always
-    environment:
-      POSTGRES_USER: smartfocus
-      POSTGRES_PASSWORD: fbebidim
-      POSTGRES_DB: smartfocus_db
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    # No expongas 5432 si no lo necesitas desde fuera de Docker
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
-
-  pgadmin:
-    image: dpage/pgadmin4:9.8
-    container_name: smartfocus-pgadmin
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: smartfocuS@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      db:
-        condition: service_healthy
-
 volumes:
-  db_data:
-  pgadmin_data:
+  pgdata: {}

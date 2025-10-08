@@ -5,60 +5,107 @@ on:
     branches: ["main"]
 
 env:
-  EC2_HOST: ec2-18-191-109-179.us-east-2.compute.amazonaws.com
-  EC2_USER: ${{ secrets.EC2_USER }}
-  APP_DIR: /home/ubuntu/SmartFocus
+  # Imagen en GitHub Container Registry (cambiá "tuusuario")
+  IMAGE_NAME: ghcr.io/tuusuario/smartfocus-backend
+  # HARD-CODE: DNS público de tu instancia (actualizalo cuando cambie)
+  EC2_HOST: ec2-3-144-26-35.us-east-2.compute.amazonaws.com
+  # Usuario SSH (Ubuntu AMI suele ser 'ubuntu')
+  EC2_USER: ubuntu
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
 
-      - name: Setup SSH
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------- CI: Build & Push ----------
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      # ---------- CD: Deploy ----------
+      - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Install rsync
-        run: sudo apt-get update && sudo apt-get install -y rsync
-
-      - name: Generate .env (from Secrets) on runner
+      - name: Generate .env from Secrets
         run: |
-          : > .env
-          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
-          echo "DB_PASS=${{ secrets.DB_PASS }}" >> .env
-          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
-          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
-          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
-          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
-          echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> .env
-          echo "JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}" >> .env
-          echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
-          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
-          echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}" >> .env
+          cat > .env << 'EOF'
+          # ====== Database ======
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASS=${{ secrets.DB_PASS }}
+          DB_HOST=db
+          DB_PORT=5432
+          DB_NAME=${{ secrets.DB_NAME }}
 
-      - name: Sync code to EC2 (exclude local .env)
-        run: |
-          rsync -az --delete --exclude='.env' \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
-            ./ "$EC2_USER@$EC2_HOST:$APP_DIR/"
+          # ====== App / Auth ======
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+          JWT_ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=120
 
-      - name: Upload .env to EC2
-        run: |
-          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes ./.env \
-            "$EC2_USER@$EC2_HOST:$APP_DIR/.env"
+          # ====== Gemini ======
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL=
+          EOF
 
-      - name: Rebuild & restart containers
+      - name: Copy .env to EC2
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" "
-            set -e
-            cd $APP_DIR
-            docker compose down
-            docker compose build --no-cache backend
-            docker compose up -d --force-recreate --remove-orphans
-            docker compose ps
-          "
+          scp -i <(printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}") -o StrictHostKeyChecking=yes .env ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:/home/${{ env.EC2_USER }}/SmartFocus/.env
+
+      - name: Remote deploy (pull & up, fix perms, prune)
+        run: |
+          ssh -i <(printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}") -o StrictHostKeyChecking=yes ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOSSH'
+          set -euo pipefail
+
+          cd /home/${USER}/SmartFocus
+
+          # Asegurar permisos del .env
+          chmod 600 .env
+          chown ${USER}:${USER} .env
+
+          # Login a GHCR con token de SOLO LECTURA
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+          # Variables para docker-compose (image + tag inmutable)
+          export IMAGE_NAME="${IMAGE_NAME}"
+          export IMAGE_TAG="sha-${GITHUB_SHA}"
+
+          # Actualizar backend sin build en servidor
+          docker compose pull backend
+          docker compose up -d --remove-orphans
+
+          # Limpieza controlada (solo lo no usado)
+          docker container prune -f
+          docker image prune -a -f
+          docker network prune -f
+          EOSSH
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          GITHUB_SHA: ${{ github.sha }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}     # PAT con read:packages
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}   # PAT con read:packages
