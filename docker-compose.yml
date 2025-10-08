@@ -17,7 +17,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
+#HOLAAAAAAAAAAAAAAAAAA
   backend:
     image: ${IMAGE_NAME:-ghcr.io/${COMPOSE_PROJECT_NAME:-smartfocus}/smartfocus-backend}:${IMAGE_TAG:-latest}
     env_file:
