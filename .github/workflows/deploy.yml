@@ -102,35 +102,34 @@ jobs:
       - name: Remote deploy (pull & up, fix perms, prune)
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOSSH'
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<EOF
           set -euo pipefail
 
-          # Asegurar carpeta destino por si no existe
+          # Variables INYECTADAS desde el runner (GH actúa aquí)
+          export GHCR_USER='InakiMerino0'
+          export GHCR_TOKEN='${{ secrets.GHCR_TOKEN }}'
+          export IMAGE_NAME='${{ env.IMAGE_NAME }}'
+          export GITHUB_SHA='${{ github.sha }}'
+
           mkdir -p /home/${USER}/SmartFocus
           cd /home/${USER}/SmartFocus
 
-          # Asegurar permisos del .env
+          # Asegurar permisos del .env (si existe)
           chmod 600 .env || true
           chown ${USER}:${USER} .env || true
 
-          # Login a GHCR con token de SOLO LECTURA (PAT con read:packages)
-          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+          # Login a GHCR con token de SOLO LECTURA
+          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
 
-          # Variables para docker-compose (imagen + tag inmutable)
-          export IMAGE_NAME="${IMAGE_NAME}"
-          export IMAGE_TAG="sha-${GITHUB_SHA}"
+          # Tag inmutable (por commit)
+          export IMAGE_TAG="sha-\$GITHUB_SHA"
 
           # Actualizar backend sin build en servidor
           docker compose pull backend
           docker compose up -d --remove-orphans
 
-          # Limpieza controlada (solo lo no usado)
+          # Limpieza controlada (solo recursos no usados)
           docker container prune -f
           docker image prune -a -f
           docker network prune -f
-          EOSSH
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          GITHUB_SHA: ${{ github.sha }}
-          GHCR_USER: InakiMerino0                # tu usuario GH
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}  # PAT con read:packages
+          EOF
