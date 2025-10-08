@@ -6,9 +6,9 @@ on:
 
 env:
   # Imagen en GitHub Container Registry (cambiá "tuusuario")
-  IMAGE_NAME: ghcr.io/tuusuario/smartfocus-backend
+  IMAGE_NAME: ghcr.io/InakiMerino0/smartfocus-backend
   # HARD-CODE: DNS público de tu instancia (actualizalo cuando cambie)
-  EC2_HOST: ec2-3-144-26-35.us-east-2.compute.amazonaws.com
+  EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com
   # Usuario SSH (Ubuntu AMI suele ser 'ubuntu')
   EC2_USER: ubuntu
 
