@@ -31,8 +31,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Usa el Dockerfile dentro de /backend y el contexto de /backend
-      # (si preferís tu Dockerfile antiguo con COPY backend/, cambia context: .)
       - name: Build & Push image (context ./backend)
         uses: docker/build-push-action@v6
         with:
@@ -49,9 +47,10 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (to upload compose)
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # 🔐 Crear clave privada temporal para conectar al EC2
       - name: Setup SSH key + known_hosts
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -62,7 +61,8 @@ jobs:
           ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Ensure remote dir + upload docker-compose.yml
+      # 📦 Subir docker-compose.yml al servidor
+      - name: Upload docker-compose.yml to EC2
         run: |
           ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${{ env.REMOTE_APP_DIR }}'"
@@ -70,7 +70,7 @@ jobs:
             docker-compose.yml \
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
 
-      # (OPCIONAL) Actualizar .env remoto desde secrets. Borra este step si ya tenés tu .env en EC2.
+      # 🌱 (Opcional) crear .env en el servidor desde secrets
       - name: (Optional) Update .env on EC2 from secrets
         env:
           DB_USER: ${{ secrets.DB_USER }}
@@ -84,35 +84,32 @@ jobs:
           DB_NAME=${DB_NAME}
           EOF'"
 
+      # 🚀 Desplegar
       - name: SSH & Deploy
         run: |
-          # Pasamos variables al entorno remoto y ejecutamos el script
           ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" \
-            "export REMOTE_APP_DIR='${{ env.REMOTE_APP_DIR }}'; \
-             export IMAGE_TAG='${{ github.sha }}'; \
-             export GHCR_USER='${{ github.actor }}'; \
-             export GHCR_TOKEN='${{ secrets.GITHUB_TOKEN }}'; \
-             bash -s" << 'EOSSH'
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s << 'EOSSH'
           set -euo pipefail
-          cd "$REMOTE_APP_DIR"
+          cd "${REMOTE_APP_DIR:-/home/ubuntu/SmartFocus}"
 
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          echo ">>> Logging in to GHCR..."
+          echo "${GHCR_TOKEN:-${GITHUB_TOKEN}}" | docker login ghcr.io -u "${GHCR_USER:-${GITHUB_ACTOR}}" --password-stdin
 
-          # Compose debe referenciar: ghcr.io/.../smartfocus-backend:${IMAGE_TAG}
+          export IMAGE_TAG="${IMAGE_TAG:-${GITHUB_SHA}}"
+          echo ">>> Deploying image: ghcr.io/inakimerino0/smartfocus-backend:$IMAGE_TAG"
+
           docker compose pull backend
           docker compose up -d --remove-orphans
 
           cid="$(docker compose ps -q backend || true)"
           if [ -n "$cid" ]; then
-            echo ">> Container ID: $cid"
             img_id="$(docker inspect -f '{{.Image}}' "$cid")"
-            echo ">> Image ID: $img_id"
-            docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
+            echo ">>> Container running image: $img_id"
           fi
-
-          # Healthcheck rápido (ajusta a /ready si lo tenés)
-          curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
 
           docker image prune -f || true
           EOSSH
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ github.sha }}

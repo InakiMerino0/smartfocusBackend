@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16
@@ -21,7 +23,8 @@ services:
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/TU_USUARIO_GH/smartfocus-backend:${IMAGE_TAG}
+    # 👇 Nombre de imagen 100% minúsculas y exacto
+    image: ghcr.io/inakimerino0/smartfocus-backend:${IMAGE_TAG}
     pull_policy: always
     env_file:
       - .env
@@ -33,7 +36,7 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-    # SIN build:, SIN volumes de código
+    # Seguridad y límites básicos
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
