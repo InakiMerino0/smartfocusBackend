@@ -1,4 +1,4 @@
-name: Deploy to EC2 (GHCR, sin git en server)
+name: Deploy to EC2 (GHCR)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
@@ -31,11 +31,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push image
+      - name: Build & Push image (context ./backend)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
           build-args: |
             COMMIT_SHA=${{ github.sha }}
@@ -50,42 +50,42 @@ jobs:
       - name: Checkout (to upload compose)
         uses: actions/checkout@v4
 
-      - name: Prepare SSH known_hosts
+      - name: Prepare SSH
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
           chmod 700 ~/.ssh
 
-      - name: Upload docker-compose.yml to EC2 (scp)
+      - name: Ensure remote dir + upload docker-compose.yml
         run: |
+          ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${REMOTE_APP_DIR}'"
           scp -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
-              docker-compose.yml \
-              "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
+            docker-compose.yml \
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
 
-      # (Opcional) Crear/actualizar .env en el server con secrets
-      # Si ya existe .env en EC2, podés borrar este paso.
-      - name: Update .env on EC2 (optional)
+      # Si NO querés tocar tu .env remoto, borrá este step.
+      - name: (Optional) Update .env on EC2 from secrets
         env:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           DB_NAME: ${{ secrets.DB_NAME }}
         run: |
           ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
-              "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${REMOTE_APP_DIR}' && \
-              bash -lc 'cat > \"${REMOTE_APP_DIR}/.env\" << EOF
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "bash -lc 'cat > \"${REMOTE_APP_DIR}/.env\" << EOF
           DB_USER=${DB_USER}
           DB_PASS=${DB_PASS}
           DB_NAME=${DB_NAME}
           EOF'"
 
-      - name: SSH & deploy
+      - name: SSH & Deploy
         env:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
-              "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s << 'EOSSH'
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s << 'EOSSH'
           set -euo pipefail
           cd "${REMOTE_APP_DIR}"
 
@@ -104,7 +104,7 @@ jobs:
             docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
           fi
 
-          # Healthcheck simple (ajusta si tenés /ready)
+          # Quick check (ajusta a /ready si lo tenés)
           curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
 
           docker image prune -f || true
