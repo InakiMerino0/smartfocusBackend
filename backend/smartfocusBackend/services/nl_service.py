@@ -45,10 +45,8 @@ def _get_materia_by_name(db: Session, usuario_id: int, nombre: str) -> Optional[
 
 def _ensure_ownership_materia(db: Session, usuario_id: int, materia_id: int) -> models.Materia:
     mat = db.get(models.Materia, materia_id)
-    if not mat:
+    if not mat or mat.materia_usuario_id != usuario_id:
         raise ValueError("Materia no encontrada")
-    if mat.materia_usuario_id != usuario_id:
-        raise PermissionError("No autorizado para acceder a esta materia")
     return mat
 
 def _ensure_ownership_evento(db: Session, usuario_id: int, evento_id: int) -> models.Evento:

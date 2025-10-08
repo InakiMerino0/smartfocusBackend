@@ -20,10 +20,14 @@ class ORMModel(BaseModel):
 # =========================
 class LoginRequest(BaseModel):
     """
-    Identificador flexible: puede ser el correo (usuario_email) o el nombre de usuario (usuario_nombre).
+    Login usando únicamente el correo electrónico del usuario.
     """
-    identifier: str = Field(..., min_length=1, description="usuario_email o usuario_nombre")
+    email: EmailStr = Field(..., description="Correo electrónico del usuario")
     password: str = Field(..., min_length=1, description="Contraseña en texto plano (se validará contra el hash)")
+class ORMModel(BaseModel):
+    class Config:
+        orm_mode = True              # Pydantic v1
+        from_attributes = True       # Pydantic v2
 
 
 class TokenResponse(BaseModel):
@@ -46,10 +50,13 @@ class UsuarioCreate(UsuarioBase):
     """
     password: str = Field(..., min_length=6, max_length=128, description="Contraseña en texto plano")
 
-class UsuarioUpdate(BaseModel):
-    usuario_nombre: Optional[str] = Field(None, min_length=1, max_length=100)
-    usuario_email: Optional[EmailStr] = None
-    password: Optional[str] = Field(None, min_length=6, max_length=128)
+class UsuarioProfileUpdate(BaseModel):
+    """
+    Schema para actualizar solo el perfil del usuario (nombre y email).
+    No incluye contraseña para mayor seguridad.
+    """
+    usuario_nombre: Optional[str] = Field(None, min_length=1, max_length=100, description="Nuevo nombre del usuario")
+    usuario_email: Optional[EmailStr] = Field(None, description="Nuevo email del usuario")
 
 class UsuarioResponse(ORMModel):
     usuario_id: int

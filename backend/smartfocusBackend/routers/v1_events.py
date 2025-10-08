@@ -66,6 +66,20 @@ def get_event_endpoint(
     except svc.AccesoNoAutorizado:
         raise HTTPException(status_code=403, detail="No autorizado para acceder a este evento")
 
+@router.get(
+    "/user",
+    response_model=List[schemas.EventoResponse],
+    summary="Obtener todos los eventos del usuario autenticado",
+    description="Retorna todos los eventos de todas las materias del usuario logueado"
+)
+def get_user_events_endpoint(
+    usuario=Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return svc.get_user_events(db, usuario.usuario_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo eventos del usuario: {str(e)}")
 
 @router.put(
     "/{evento_id}",

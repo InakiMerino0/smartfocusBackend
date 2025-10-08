@@ -44,19 +44,16 @@ def decodificar_token(token: str) -> Dict[str, Any]:
 # =========================
 # Core de autenticación
 # =========================
-def _buscar_usuario_por_identificador(db: Session, identificador: str) -> Optional[models.Usuario]:
-    # Buscar por email o por nombre
-    stmt = select(models.Usuario).where(
-        (models.Usuario.usuario_email == identificador) | 
-        (models.Usuario.usuario_nombre == identificador)
-    )
+def _buscar_usuario_por_email(db: Session, email: str) -> Optional[models.Usuario]:
+    # Buscar únicamente por email
+    stmt = select(models.Usuario).where(models.Usuario.usuario_email == email)
     return db.execute(stmt).scalar_one_or_none()
 
 def _buscar_usuario_por_id(db: Session, usuario_id: int) -> Optional[models.Usuario]:
     return db.get(models.Usuario, usuario_id)
 
 def login_user(request: schemas.LoginRequest, db: Session):
-    usuario = _buscar_usuario_por_identificador(db, request.identifier)
+    usuario = _buscar_usuario_por_email(db, request.email)
     if not usuario or not utils.verificar_clave(request.password, usuario.usuario_password):
         # Mensaje genérico para no filtrar existencia
         raise InvalidCredentialsError("Credenciales inválidas")
