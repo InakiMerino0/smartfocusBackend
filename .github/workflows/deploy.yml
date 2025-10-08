@@ -31,6 +31,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Usa el Dockerfile dentro de /backend y el contexto de /backend
+      # (si preferís tu Dockerfile antiguo con COPY backend/, cambia context: .)
       - name: Build & Push image (context ./backend)
         uses: docker/build-push-action@v6
         with:
@@ -50,49 +52,54 @@ jobs:
       - name: Checkout (to upload compose)
         uses: actions/checkout@v4
 
-      - name: Prepare SSH
+      - name: Setup SSH key + known_hosts
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
           ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
-          chmod 700 ~/.ssh
+          chmod 644 ~/.ssh/known_hosts
 
       - name: Ensure remote dir + upload docker-compose.yml
         run: |
-          ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${REMOTE_APP_DIR}'"
-          scp -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
+          ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${{ env.REMOTE_APP_DIR }}'"
+          scp -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
             docker-compose.yml \
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
 
-      # Si NO querés tocar tu .env remoto, borrá este step.
+      # (OPCIONAL) Actualizar .env remoto desde secrets. Borra este step si ya tenés tu .env en EC2.
       - name: (Optional) Update .env on EC2 from secrets
         env:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           DB_NAME: ${{ secrets.DB_NAME }}
         run: |
-          ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "bash -lc 'cat > \"${REMOTE_APP_DIR}/.env\" << EOF
+          ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "bash -lc 'cat > \"${{ env.REMOTE_APP_DIR }}/.env\" << EOF
           DB_USER=${DB_USER}
           DB_PASS=${DB_PASS}
           DB_NAME=${DB_NAME}
           EOF'"
 
       - name: SSH & Deploy
-        env:
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s << 'EOSSH'
+          # Pasamos variables al entorno remoto y ejecutamos el script
+          ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" \
+            "export REMOTE_APP_DIR='${{ env.REMOTE_APP_DIR }}'; \
+             export IMAGE_TAG='${{ github.sha }}'; \
+             export GHCR_USER='${{ github.actor }}'; \
+             export GHCR_TOKEN='${{ secrets.GITHUB_TOKEN }}'; \
+             bash -s" << 'EOSSH'
           set -euo pipefail
-          cd "${REMOTE_APP_DIR}"
+          cd "$REMOTE_APP_DIR"
 
-          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-          export IMAGE_TAG="${IMAGE_TAG}"
-
+          # Compose debe referenciar: ghcr.io/.../smartfocus-backend:${IMAGE_TAG}
           docker compose pull backend
           docker compose up -d --remove-orphans
 
@@ -104,7 +111,7 @@ jobs:
             docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
           fi
 
-          # Quick check (ajusta a /ready si lo tenés)
+          # Healthcheck rápido (ajusta a /ready si lo tenés)
           curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
 
           docker image prune -f || true
