@@ -1,40 +1,27 @@
-name: Deploy to EC2
+name: Deploy to EC2 (GHCR, sin git en server)
 
 on:
   push:
     branches: ["main"]
 
-# Necesario para publicar la imagen en GHCR con GITHUB_TOKEN
 permissions:
   contents: read
   packages: write
 
 env:
-  # ---- Ajustá si cambian ----
-  EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com
+  IMAGE_NAME: ghcr.io/inakimerino0/smartfocus-backend
+  EC2_HOST: ec2-3-144-26-35.us-east-2.compute.amazonaws.com
   EC2_USER: ubuntu
   REMOTE_APP_DIR: /home/ubuntu/SmartFocus
-  # ---------------------------
-
-concurrency:
-  group: deploy-prod
-  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Nombre de imagen en minúsculas (GHCR lo exige)
-      - name: Compute lowercase IMAGE_NAME
-        run: |
-          echo "IMAGE_NAME=$(echo ghcr.io/${{ github.repository_owner }}/smartfocus-backend | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      # ---------- CI: Build & Push a GHCR ----------
-      - name: Set up Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
@@ -44,114 +31,81 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push backend image
+      - name: Build & Push image
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           build-args: |
             COMMIT_SHA=${{ github.sha }}
           tags: |
-            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      # (Visibilidad) Digest de la imagen construida
-      - name: Show built image digest
-        run: docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (to upload compose)
+        uses: actions/checkout@v4
 
-      # ---------- CD: Deploy en EC2 ----------
-      - name: Add EC2 host to known_hosts
+      - name: Prepare SSH known_hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
 
-      - name: Write SSH key from EC2_SSH_KEY (fix CRLF + perms)
+      - name: Upload docker-compose.yml to EC2 (scp)
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          scp -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
+              docker-compose.yml \
+              "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
 
-      - name: Generate .env from Secrets
+      # (Opcional) Crear/actualizar .env en el server con secrets
+      # Si ya existe .env en EC2, podés borrar este paso.
+      - name: Update .env on EC2 (optional)
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_NAME: ${{ secrets.DB_NAME }}
         run: |
-          cat > .env << 'EOF'
-          # ====== Database ======
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASS=${{ secrets.DB_PASS }}
-          DB_HOST=db
-          DB_PORT=5432
-          DB_NAME=${{ secrets.DB_NAME }}
+          ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
+              "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${REMOTE_APP_DIR}' && \
+              bash -lc 'cat > \"${REMOTE_APP_DIR}/.env\" << EOF
+          DB_USER=${DB_USER}
+          DB_PASS=${DB_PASS}
+          DB_NAME=${DB_NAME}
+          EOF'"
 
-          # ====== App / Auth ======
-          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-          JWT_ALGORITHM=HS256
-          ACCESS_TOKEN_EXPIRE_MINUTES=120
-
-          # ====== Gemini ======
-          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL=
-          EOF
-
-      - name: Ensure remote folder
+      - name: SSH & deploy
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${{ env.REMOTE_APP_DIR }}'"
-
-      - name: Copy .env to EC2
-        run: |
-          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            .env "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/.env"
-
-      # Deploy con verificación de imagen y recreación forzada del backend
-      - name: Remote deploy (hard refresh with evidence)
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<'EOSSH'
+          ssh -i "${{ secrets.EC2_SSH_KEY }}" -o IdentitiesOnly=yes \
+              "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s << 'EOSSH'
           set -euo pipefail
+          cd "${REMOTE_APP_DIR}"
 
-          APP_DIR="/home/ubuntu/SmartFocus"
-          cd "$APP_DIR"
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 
-          IMAGE_NAME='${{ env.IMAGE_NAME }}'
-          IMAGE_TAG="sha-${{ github.sha }}"
+          export IMAGE_TAG="${IMAGE_TAG}"
 
-          echo ">> Using image: $IMAGE_NAME:$IMAGE_TAG"
-
-          # 0) Mostrar compose que ve Docker (por si el archivo en servidor es otro)
-          echo ">> compose image lines (rendered):"
-          IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" docker compose config | grep -i 'image:' || true
-
-          # 1) Login & pull explícito de la imagen destino
-          echo '${{ secrets.GHCR_TOKEN }}' | docker login ghcr.io -u 'InakiMerino0' --password-stdin
-          docker pull "$IMAGE_NAME:$IMAGE_TAG"
-
-          # 2) Parar y borrar SOLO el servicio backend (evita quedarse con la imagen anterior)
-          docker compose stop backend || true
-          docker compose rm -f backend || true
-
-          # 3) Subir backend forzando recreación y siempre tirando de la imagen recién bajada
-          IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" \
-            docker compose up -d --no-deps --force-recreate --pull always backend
-
-          # 4) Evidencia: qué imagen/digest quedó corriendo
-          echo ">> docker compose images:"
-          docker compose images || true
+          docker compose pull backend
+          docker compose up -d --remove-orphans
 
           cid="$(docker compose ps -q backend || true)"
           if [ -n "$cid" ]; then
+            echo ">> Container ID: $cid"
             img_id="$(docker inspect -f '{{.Image}}' "$cid")"
-            echo ">> backend container image id: $img_id"
-            echo ">> image digest + revision label:"
-            docker image inspect "$img_id" --format 'ID={{.Id}}  DIGEST={{index .RepoDigests 0}}  REV={{index .Config.Labels "org.opencontainers.image.revision"}}' || true
+            echo ">> Image ID: $img_id"
+            docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
           fi
 
-          # 5) (opcional) probar health/ready
-          curl -fsS http://127.0.0.1:8000/ready || true
+          # Healthcheck simple (ajusta si tenés /ready)
+          curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
 
-          # 6) Limpieza de lo que ya no se usa
-          docker container prune -f
-          docker image prune -a -f
-          docker network prune -f
+          docker image prune -f || true
           EOSSH

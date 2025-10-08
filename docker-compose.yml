@@ -1,41 +1,42 @@
+version: "3.9"
+
 services:
   db:
-    image: postgres:16
+    image: postgres:15
+    container_name: smartfocus-db
+    restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"   # si no lo necesitás desde afuera, podés quitarlo
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 3s
-      retries: 12
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      retries: 20
+      start_period: 10s
 
   backend:
-    # La imagen y tag llegan del workflow (IMAGE_NAME + IMAGE_TAG)
-    image: ${IMAGE_NAME}:${IMAGE_TAG}
+    image: ghcr.io/inakimerino0/smartfocus-backend:${IMAGE_TAG}
+    container_name: smartfocus-backend
+    pull_policy: always
     env_file:
       - .env
     environment:
-      # Construimos la URL desde el .env
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME}
+      # Si preferís centralizar aquí:
+      # DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
       PYTHONPATH: /app
+    command: uvicorn smartfocusBackend.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
-    # Hardening + límites
-    user: "10001:10001"
-    read_only: true
-    tmpfs: ["/tmp"]
+    restart: unless-stopped
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
@@ -44,9 +45,5 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    mem_limit: "512m"
-    cpus: "0.50"
-    restart: unless-stopped
-
 volumes:
-  pgdata: {}
+  db_data:
