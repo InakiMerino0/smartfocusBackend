@@ -86,30 +86,38 @@ jobs:
 
       # 🚀 Desplegar
       - name: SSH & Deploy
+        env:
+          # Tus variables: definilas en el workflow (env) o como secrets
+          GHCR_USER: ${{ secrets.GHCR_USER }}          # ej: inakimerino0
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}    # token con permisos a GHCR
+          IMAGE_TAG: ${{ github.sha }}             # tag inmutable por commit
         run: |
+          echo ">>> SSH & Deploy..."
           ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s << 'EOSSH'
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" \
+            "export REMOTE_APP_DIR='${{ env.REMOTE_APP_DIR }}'; \
+             export IMAGE_TAG='${{ env.IMAGE_TAG }}'; \
+             export GHCR_USER='${{ env.GHCR_USER }}'; \
+             export GHCR_TOKEN='${{ env.GHCR_TOKEN }}'; \
+             bash -s" << 'EOSSH'
           set -euo pipefail
-          cd "${REMOTE_APP_DIR:-/home/ubuntu/SmartFocus}"
+          cd "$REMOTE_APP_DIR"
 
-          echo ">>> Logging in to GHCR..."
-          echo "${GHCR_TOKEN:-${GITHUB_TOKEN}}" | docker login ghcr.io -u "${GHCR_USER:-${GITHUB_ACTOR}}" --password-stdin
+          echo ">>> Logging in to GHCR as $GHCR_USER"
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-          export IMAGE_TAG="${IMAGE_TAG:-${GITHUB_SHA}}"
-          echo ">>> Deploying image: ghcr.io/inakimerino0/smartfocus-backend:$IMAGE_TAG"
-
+          echo ">>> Deploying ghcr.io/inakimerino0/smartfocus-backend:$IMAGE_TAG"
           docker compose pull backend
           docker compose up -d --remove-orphans
 
           cid="$(docker compose ps -q backend || true)"
           if [ -n "$cid" ]; then
             img_id="$(docker inspect -f '{{.Image}}' "$cid")"
-            echo ">>> Container running image: $img_id"
+            echo ">> Image ID: $img_id"
+            docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
           fi
 
+          curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
           docker image prune -f || true
           EOSSH
-        env:
-          GHCR_USER: ${{ secrets.GHCR_USER }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          IMAGE_TAG: ${{ github.sha }}
+
