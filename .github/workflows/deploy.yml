@@ -105,7 +105,7 @@ jobs:
             .env "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/.env"
 
       # Deploy con verificación de imagen y recreación forzada del backend
-      - name: Remote deploy (pull & up, verify, prune)
+      - name: Remote deploy (hard refresh with evidence)
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<'EOSSH'
@@ -114,47 +114,43 @@ jobs:
           APP_DIR="/home/ubuntu/SmartFocus"
           cd "$APP_DIR"
 
-          # ====== 1) Variables de imagen del workflow ======
           IMAGE_NAME='${{ env.IMAGE_NAME }}'
           IMAGE_TAG="sha-${{ github.sha }}"
-          echo ">> Target image: $IMAGE_NAME:$IMAGE_TAG"
 
-          # ====== 2) Evitar que .env pise IMAGE_* (sanear si existen) ======
-          if [ -f .env ]; then
-            if grep -qE '^(IMAGE_NAME|IMAGE_TAG)=' .env; then
-              echo ">> Sanitizing .env: removing IMAGE_* lines"
-              tmpfile="$(mktemp)"
-              grep -vE '^(IMAGE_NAME|IMAGE_TAG)=' .env > "$tmpfile" && mv "$tmpfile" .env
-            fi
-            chmod 600 .env || true
-            chown "$(id -un)":"$(id -gn)" .env || true
-          fi
+          echo ">> Using image: $IMAGE_NAME:$IMAGE_TAG"
 
-          # ====== 3) Qué ve compose (conf renderizada)
-          echo ">> docker compose config (image lines):"
+          # 0) Mostrar compose que ve Docker (por si el archivo en servidor es otro)
+          echo ">> compose image lines (rendered):"
           IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" docker compose config | grep -i 'image:' || true
 
-          # ====== 4) Login GHCR y pull explícito ======
+          # 1) Login & pull explícito de la imagen destino
           echo '${{ secrets.GHCR_TOKEN }}' | docker login ghcr.io -u 'InakiMerino0' --password-stdin
-          echo ">> docker pull $IMAGE_NAME:$IMAGE_TAG"
           docker pull "$IMAGE_NAME:$IMAGE_TAG"
 
-          # ====== 5) Recreate backend con esa imagen sí o sí ======
-          echo ">> up --no-deps --force-recreate --pull always backend"
+          # 2) Parar y borrar SOLO el servicio backend (evita quedarse con la imagen anterior)
+          docker compose stop backend || true
+          docker compose rm -f backend || true
+
+          # 3) Subir backend forzando recreación y siempre tirando de la imagen recién bajada
           IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" \
             docker compose up -d --no-deps --force-recreate --pull always backend
 
-          # ====== 6) Mostrar imagen realmente usada (digest) ======
+          # 4) Evidencia: qué imagen/digest quedó corriendo
           echo ">> docker compose images:"
           docker compose images || true
-          echo ">> backend container image digest:"
+
           cid="$(docker compose ps -q backend || true)"
           if [ -n "$cid" ]; then
-            img="$(docker inspect -f '{{.Image}}' "$cid")"
-            docker image inspect "$img" --format '{{.Id}} {{index .RepoDigests 0}}' || true
+            img_id="$(docker inspect -f '{{.Image}}' "$cid")"
+            echo ">> backend container image id: $img_id"
+            echo ">> image digest + revision label:"
+            docker image inspect "$img_id" --format 'ID={{.Id}}  DIGEST={{index .RepoDigests 0}}  REV={{index .Config.Labels "org.opencontainers.image.revision"}}' || true
           fi
 
-          # ====== 7) Limpieza ======
+          # 5) (opcional) probar health/ready
+          curl -fsS http://127.0.0.1:8000/ready || true
+
+          # 6) Limpieza de lo que ya no se usa
           docker container prune -f
           docker image prune -a -f
           docker network prune -f
