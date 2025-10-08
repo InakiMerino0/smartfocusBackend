@@ -10,11 +10,11 @@ permissions:
   packages: write
 
 env:
-  # ---- Ajustá estos dos si cambian ----
+  # ---- Ajustá si cambian ----
   EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com
   EC2_USER: ubuntu
   REMOTE_APP_DIR: /home/ubuntu/SmartFocus
-  # ------------------------------------
+  # ---------------------------
 
 concurrency:
   group: deploy-prod
@@ -28,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Forzamos el nombre de imagen a minúsculas (GHCR lo exige)
+      # Nombre de imagen en minúsculas (GHCR lo exige)
       - name: Compute lowercase IMAGE_NAME
         run: |
           echo "IMAGE_NAME=$(echo ghcr.io/${{ github.repository_owner }}/smartfocus-backend | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
@@ -50,11 +50,17 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
           tags: |
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
           cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      # (Visibilidad) Digest de la imagen construida
+      - name: Show built image digest
+        run: docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
 
       # ---------- CD: Deploy en EC2 ----------
       - name: Add EC2 host to known_hosts
@@ -98,44 +104,58 @@ jobs:
           scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             .env "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/.env"
 
+      # Deploy con verificación de imagen y recreación forzada del backend
       - name: Remote deploy (pull & up, verify, prune)
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<EOF
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<'EOSSH'
           set -euo pipefail
 
-          # Variables inyectadas desde el runner
-          export GHCR_USER='InakiMerino0'
-          export GHCR_TOKEN='${{ secrets.GHCR_TOKEN }}'
-          export IMAGE_NAME='${{ env.IMAGE_NAME }}'
-          export GITHUB_SHA='${{ github.sha }}'
-          export IMAGE_TAG="sha-\$GITHUB_SHA"
-          export APP_DIR='${{ env.REMOTE_APP_DIR }}'
+          APP_DIR="/home/ubuntu/SmartFocus"
+          cd "$APP_DIR"
 
-          cd "\$APP_DIR"
+          # ====== 1) Variables de imagen del workflow ======
+          IMAGE_NAME='${{ env.IMAGE_NAME }}'
+          IMAGE_TAG="sha-${{ github.sha }}"
+          echo ">> Target image: $IMAGE_NAME:$IMAGE_TAG"
 
-          # (1) Mostrar qué imagen/tag vamos a desplegar
-          echo ">> Deploying image: \$IMAGE_NAME:\$IMAGE_TAG"
+          # ====== 2) Evitar que .env pise IMAGE_* (sanear si existen) ======
+          if [ -f .env ]; then
+            if grep -qE '^(IMAGE_NAME|IMAGE_TAG)=' .env; then
+              echo ">> Sanitizing .env: removing IMAGE_* lines"
+              tmpfile="$(mktemp)"
+              grep -vE '^(IMAGE_NAME|IMAGE_TAG)=' .env > "$tmpfile" && mv "$tmpfile" .env
+            fi
+            chmod 600 .env || true
+            chown "$(id -un)":"$(id -gn)" .env || true
+          fi
 
-          # (2) Login GHCR + pull explícito del backend
-          echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
-          docker compose pull backend
+          # ====== 3) Qué ve compose (conf renderizada)
+          echo ">> docker compose config (image lines):"
+          IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" docker compose config | grep -i 'image:' || true
 
-          # (3) Forzar recreación con la imagen nueva (sin tocar otros servicios)
-          IMAGE_NAME="\$IMAGE_NAME" IMAGE_TAG="\$IMAGE_TAG" \
-            docker compose up -d --no-deps --force-recreate backend
+          # ====== 4) Login GHCR y pull explícito ======
+          echo '${{ secrets.GHCR_TOKEN }}' | docker login ghcr.io -u 'InakiMerino0' --password-stdin
+          echo ">> docker pull $IMAGE_NAME:$IMAGE_TAG"
+          docker pull "$IMAGE_NAME:$IMAGE_TAG"
 
-          # (4) Mostrar la imagen realmente usada por 'backend' (digest)
-          echo ">> Running containers:"
-          docker compose ps
-          echo ">> Images in use:"
-          docker compose images
+          # ====== 5) Recreate backend con esa imagen sí o sí ======
+          echo ">> up --no-deps --force-recreate --pull always backend"
+          IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" \
+            docker compose up -d --no-deps --force-recreate --pull always backend
 
-          # (5) Limpieza de recursos no usados
+          # ====== 6) Mostrar imagen realmente usada (digest) ======
+          echo ">> docker compose images:"
+          docker compose images || true
+          echo ">> backend container image digest:"
+          cid="$(docker compose ps -q backend || true)"
+          if [ -n "$cid" ]; then
+            img="$(docker inspect -f '{{.Image}}' "$cid")"
+            docker image inspect "$img" --format '{{.Id}} {{index .RepoDigests 0}}' || true
+          fi
+
+          # ====== 7) Limpieza ======
           docker container prune -f
           docker image prune -a -f
           docker network prune -f
-          EOF
-      - name: Show built image digest
-        run: docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
-
+          EOSSH

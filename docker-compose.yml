@@ -17,34 +17,36 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-#HOLAAAAAAAAAAAAAAAAAA
-backend:
-  image: ${IMAGE_NAME}:${IMAGE_TAG}
-  env_file:
-    - .env
-  environment:
-    DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME}
-    PYTHONPATH: /app
-  depends_on:
-    db:
-      condition: service_healthy
-  ports:
-    - "8000:8000"
-  user: "10001:10001"
-  read_only: true
-  tmpfs: ["/tmp"]
-  cap_drop: [ALL]
-  security_opt:
-    - no-new-privileges:true
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
-  mem_limit: "512m"
-  cpus: "0.50"
-  restart: unless-stopped
 
+  backend:
+    # La imagen y tag llegan del workflow (IMAGE_NAME + IMAGE_TAG)
+    image: ${IMAGE_NAME}:${IMAGE_TAG}
+    env_file:
+      - .env
+    environment:
+      # Construimos la URL desde el .env
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME}
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # Hardening + límites
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: "512m"
+    cpus: "0.50"
+    restart: unless-stopped
 
 volumes:
   pgdata: {}
