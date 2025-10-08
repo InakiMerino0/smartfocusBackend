@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16
+    image: postgres:15           # <-- usa la misma mayor del volumen viejo
     container_name: smartfocus-db
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -23,20 +23,16 @@ services:
     restart: unless-stopped
 
   backend:
-    # 👇 Nombre de imagen 100% minúsculas y exacto
     image: ghcr.io/inakimerino0/smartfocus-backend:${IMAGE_TAG}
     pull_policy: always
-    env_file:
-      - .env
+    env_file: [.env]
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
-    # Seguridad y límites básicos
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
@@ -49,4 +45,6 @@ services:
     cpus: "0.50"
 
 volumes:
-  pgdata: {}
+  pgdata:
+    external: true
+    name: smartfocus_db_data   # <-- tu volumen viejo
