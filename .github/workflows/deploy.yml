@@ -83,11 +83,11 @@ jobs:
 
       - name: Copy .env to EC2
         run: |
-          scp -i <(printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}") -o StrictHostKeyChecking=yes .env ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:/home/${{ env.EC2_USER }}/SmartFocus/.env
+          scp -i <(printf '%s' "${{ secrets.EC2_SSH_KEY }}") -o StrictHostKeyChecking=yes .env ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:/home/${{ env.EC2_USER }}/SmartFocus/.env
 
       - name: Remote deploy (pull & up, fix perms, prune)
         run: |
-          ssh -i <(printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}") -o StrictHostKeyChecking=yes ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOSSH'
+          ssh -i <(printf '%s' "${{ secrets.EC2_SSH_KEY }}") -o StrictHostKeyChecking=yes ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'EOSSH'
           set -euo pipefail
 
           cd /home/${USER}/SmartFocus
