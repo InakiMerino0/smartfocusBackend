@@ -4,16 +4,17 @@ on:
   push:
     branches: ["main"]
 
-# El GITHUB_TOKEN necesita permiso para publicar a GHCR
+# Necesario para publicar la imagen en GHCR con GITHUB_TOKEN
 permissions:
   contents: read
   packages: write
 
 env:
-  # HARD-CODEA tu DNS/IP pública de EC2
+  # ---- Ajustá estos dos si cambian ----
   EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com
   EC2_USER: ubuntu
-  # Usuario SSH (Ubuntu suele ser 'ubuntu'); si preferís, tomalo de secrets
+  REMOTE_APP_DIR: /home/ubuntu/SmartFocus
+  # ------------------------------------
 
 concurrency:
   group: deploy-prod
@@ -27,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Forzar nombre de imagen en minúsculas (GHCR lo exige)
+      # Forzamos el nombre de imagen a minúsculas (GHCR lo exige)
       - name: Compute lowercase IMAGE_NAME
         run: |
           echo "IMAGE_NAME=$(echo ghcr.io/${{ github.repository_owner }}/smartfocus-backend | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
@@ -64,15 +65,8 @@ jobs:
       - name: Write SSH key from EC2_SSH_KEY (fix CRLF + perms)
         run: |
           mkdir -p ~/.ssh
-          # 🔧 Elimina \r por si el secret se pegó con formato Windows
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-
-      # (Opcional temporal) Debug del login para ver por qué falla
-      - name: Test SSH connectivity (verbose)
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -vvv \
-          ${{ env.EC2_USER }}@${{ env.EC2_HOST }} "echo 'SSH OK'"
 
       - name: Generate .env from Secrets
         run: |
@@ -94,10 +88,15 @@ jobs:
           GEMINI_MODEL=
           EOF
 
+      - name: Ensure remote folder
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${{ env.REMOTE_APP_DIR }}'"
+
       - name: Copy .env to EC2
         run: |
           scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            .env ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:/home/${{ env.EC2_USER }}/SmartFocus/.env
+            .env "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/.env"
 
       - name: Remote deploy (pull & up, fix perms, prune)
         run: |
@@ -105,20 +104,21 @@ jobs:
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<EOF
           set -euo pipefail
 
-          # Variables INYECTADAS desde el runner (GH actúa aquí)
+          # Variables inyectadas desde el runner
           export GHCR_USER='InakiMerino0'
           export GHCR_TOKEN='${{ secrets.GHCR_TOKEN }}'
           export IMAGE_NAME='${{ env.IMAGE_NAME }}'
           export GITHUB_SHA='${{ github.sha }}'
+          export APP_DIR='${{ env.REMOTE_APP_DIR }}'
 
-          mkdir -p /home/${USER}/SmartFocus
-          cd /home/${USER}/SmartFocus
+          # Ir al directorio del proyecto en la EC2
+          cd "\$APP_DIR"
 
           # Asegurar permisos del .env (si existe)
           chmod 600 .env || true
-          chown ${USER}:${USER} .env || true
+          chown \$(id -un):\$(id -gn) .env || true
 
-          # Login a GHCR con token de SOLO LECTURA
+          # Login a GHCR con token de SOLO LECTURA (PAT read:packages)
           echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
 
           # Tag inmutable (por commit)
@@ -132,4 +132,4 @@ jobs:
           docker container prune -f
           docker image prune -a -f
           docker network prune -f
-          EOF
+EOF
