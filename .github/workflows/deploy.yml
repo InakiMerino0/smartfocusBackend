@@ -60,12 +60,19 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      # ⬇️ Usamos tu secret EXISTENTE EC2_SSH_KEY y lo escribimos a un archivo
-      - name: Write SSH key from EC2_SSH_KEY
+      - name: Write SSH key from EC2_SSH_KEY (fix CRLF + perms)
         run: |
           mkdir -p ~/.ssh
+          # 🔧 Elimina \r por si el secret se pegó con formato Windows
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+
+      # (Opcional temporal) Debug del login para ver por qué falla
+      - name: Test SSH connectivity (verbose)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -vvv \
+          ${{ env.EC2_USER }}@${{ env.EC2_HOST }} "echo 'SSH OK'"
+
 
       - name: Generate .env from Secrets
         run: |
