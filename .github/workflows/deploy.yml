@@ -98,7 +98,7 @@ jobs:
           scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             .env "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/.env"
 
-      - name: Remote deploy (pull & up, fix perms, prune)
+      - name: Remote deploy (pull & up, verify, prune)
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" bash -s <<EOF
@@ -109,27 +109,33 @@ jobs:
           export GHCR_TOKEN='${{ secrets.GHCR_TOKEN }}'
           export IMAGE_NAME='${{ env.IMAGE_NAME }}'
           export GITHUB_SHA='${{ github.sha }}'
+          export IMAGE_TAG="sha-\$GITHUB_SHA"
           export APP_DIR='${{ env.REMOTE_APP_DIR }}'
 
-          # Ir al directorio del proyecto en la EC2
           cd "\$APP_DIR"
 
-          # Asegurar permisos del .env (si existe)
-          chmod 600 .env || true
-          chown \$(id -un):\$(id -gn) .env || true
+          # (1) Mostrar qué imagen/tag vamos a desplegar
+          echo ">> Deploying image: \$IMAGE_NAME:\$IMAGE_TAG"
 
-          # Login a GHCR con token de SOLO LECTURA (PAT read:packages)
+          # (2) Login GHCR + pull explícito del backend
           echo "\$GHCR_TOKEN" | docker login ghcr.io -u "\$GHCR_USER" --password-stdin
-
-          # Tag inmutable (por commit)
-          export IMAGE_TAG="sha-\$GITHUB_SHA"
-
-          # Actualizar backend sin build en servidor
           docker compose pull backend
-          docker compose up -d --remove-orphans
 
-          # Limpieza controlada (solo recursos no usados)
+          # (3) Forzar recreación con la imagen nueva (sin tocar otros servicios)
+          IMAGE_NAME="\$IMAGE_NAME" IMAGE_TAG="\$IMAGE_TAG" \
+            docker compose up -d --no-deps --force-recreate backend
+
+          # (4) Mostrar la imagen realmente usada por 'backend' (digest)
+          echo ">> Running containers:"
+          docker compose ps
+          echo ">> Images in use:"
+          docker compose images
+
+          # (5) Limpieza de recursos no usados
           docker container prune -f
           docker image prune -a -f
           docker network prune -f
           EOF
+      - name: Show built image digest
+        run: docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
+
