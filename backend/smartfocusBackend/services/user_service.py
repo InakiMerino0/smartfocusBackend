@@ -31,6 +31,7 @@ def register_user(db: Session, payload: schemas.UsuarioCreate) -> schemas.Usuari
         usuario_nombre=nombre_norm,
         usuario_email=email_norm,               
         usuario_password=hash_clave(payload.password),
+        usuario_daltonismo=payload.usuario_daltonismo,
     )
     db.add(user)
     db.commit()
@@ -41,6 +42,7 @@ def register_user(db: Session, payload: schemas.UsuarioCreate) -> schemas.Usuari
         usuario_id=user.usuario_id,
         usuario_nombre=user.usuario_nombre,
         usuario_email=user.usuario_email,
+        usuario_daltonismo=user.usuario_daltonismo,
         usuario_created_at=user.usuario_created_at,
     )
 
@@ -72,6 +74,12 @@ def update_user_profile(db: Session, usuario_id: int, payload: schemas.UsuarioPr
             user.usuario_nombre = nombre_norm
             cambios_realizados = True
     
+    # Verificar y actualizar daltonismo si es diferente
+    if payload.usuario_daltonismo:
+        if payload.usuario_daltonismo != user.usuario_daltonismo:
+            user.usuario_daltonismo = payload.usuario_daltonismo
+            cambios_realizados = True
+    
     # Solo hacer commit si hubo cambios
     if cambios_realizados:
         db.add(user)
@@ -82,6 +90,7 @@ def update_user_profile(db: Session, usuario_id: int, payload: schemas.UsuarioPr
         usuario_id=user.usuario_id,
         usuario_nombre=user.usuario_nombre,
         usuario_email=user.usuario_email,
+        usuario_daltonismo=user.usuario_daltonismo,
         usuario_created_at=user.usuario_created_at,
     )
     

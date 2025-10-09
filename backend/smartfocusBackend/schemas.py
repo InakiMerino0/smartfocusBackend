@@ -4,6 +4,17 @@ from __future__ import annotations
 from datetime import datetime, date
 from typing import Literal, Optional
 from pydantic import BaseModel, EmailStr, Field
+import enum
+
+
+class TipoDaltonismo(enum.Enum):
+    normal = "normal"
+    protanopia = "protanopia"
+    deuteranopia = "deuteranopia"
+    tritanopia = "tritanopia"
+    protanomalia = "protanomalia"
+    deuteranomalia = "deuteranomalia"
+    tritanomalia = "tritanomalia"
 
 
 # -------------------------------------------------------------------
@@ -43,6 +54,7 @@ class TokenResponse(BaseModel):
 class UsuarioBase(BaseModel):
     usuario_nombre: str = Field(..., min_length=1, max_length=100)
     usuario_email: EmailStr
+    usuario_daltonismo: TipoDaltonismo = Field(default=TipoDaltonismo.normal, description="Tipo de daltonismo del usuario")
 
 class UsuarioCreate(UsuarioBase):
     """
@@ -52,16 +64,18 @@ class UsuarioCreate(UsuarioBase):
 
 class UsuarioProfileUpdate(BaseModel):
     """
-    Schema para actualizar solo el perfil del usuario (nombre y email).
+    Schema para actualizar solo el perfil del usuario (nombre, email y daltonismo).
     No incluye contraseña para mayor seguridad.
     """
     usuario_nombre: Optional[str] = Field(None, min_length=1, max_length=100, description="Nuevo nombre del usuario")
     usuario_email: Optional[EmailStr] = Field(None, description="Nuevo email del usuario")
+    usuario_daltonismo: Optional[TipoDaltonismo] = Field(None, description="Nuevo tipo de daltonismo del usuario")
 
 class UsuarioResponse(ORMModel):
     usuario_id: int
     usuario_nombre: str
     usuario_email: EmailStr
+    usuario_daltonismo: TipoDaltonismo
     usuario_created_at: datetime
 
 

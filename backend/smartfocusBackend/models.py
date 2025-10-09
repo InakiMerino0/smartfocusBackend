@@ -1,10 +1,28 @@
 # models.py
 from datetime import datetime, date
 from typing import List, Optional
+import enum
 
 from sqlalchemy import (Integer, String, Text, DateTime, Date, ForeignKey, Index, Enum, func)
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .database import Base
+
+
+class TipoDaltonismo(enum.Enum):
+    normal = "normal"
+    protanopia = "protanopia"
+    deuteranopia = "deuteranopia"
+    tritanopia = "tritanopia"
+    protanomalia = "protanomalia"
+    deuteranomalia = "deuteranomalia"
+    tritanomalia = "tritanomalia"
+
+
+TipoDaltonismoEnum = Enum(
+    TipoDaltonismo,
+    name="tipo_daltonismo",
+    create_type=False
+)
 
 class Usuario(Base):
     __tablename__ = "usuario"
@@ -13,6 +31,11 @@ class Usuario(Base):
     usuario_nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     usuario_email: Mapped[str] = mapped_column(String(150), nullable=False, unique=True, index=True)
     usuario_password: Mapped[str] = mapped_column(Text, nullable=False)
+    usuario_daltonismo: Mapped[TipoDaltonismo] = mapped_column(
+        TipoDaltonismoEnum, 
+        nullable=False, 
+        server_default="normal"
+    )
     usuario_created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
