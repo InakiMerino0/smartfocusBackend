@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   backend:
-    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local:
+    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local: ddd
     image: ${IMAGE_NAME:-ghcr.io/inakimerino0/smartfocus-backend}:${IMAGE_TAG:-latest}
     # Si querés forzar build local, comenta 'image:' y descomenta build:
     build:
