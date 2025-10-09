@@ -24,10 +24,9 @@ class GeminiClient:
         api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY no configurada.")
+            logging.info("GeminiClient: GEMINI_API_KEY no configurada en el entorno")
 
         model_name = "gemini-2.5-pro"
-        
-        logging.info(f"GeminiClient: Configurando con modelo '{model_name}'")
         
         genai.configure(api_key=api_key)
 
