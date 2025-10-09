@@ -3,10 +3,7 @@ from typing import Optional, Literal
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-# Si tu API requiere auth para este endpoint:
-# from ..auth import get_current_user
-# from ..schemas import UsuarioResponse  # o el modelo que uses para 'current_user'
-
+from .. import auth
 from ..services.whisper_service import transcribe_audio
 
 router = APIRouter(prefix="/api/v1/whisper", tags=["whisper"])
@@ -20,7 +17,7 @@ async def transcribe_endpoint(
     language: Optional[str] = Form(None, description="Idioma forzado, ej. 'es'"),
     responseFormat: ResponseFormat = Form("json", description="Formato de respuesta: json|verbose_json|text|srt|vtt"),
     model: str = Form("whisper-1", description="Modelo de transcripción"),
-    # current_user: UsuarioResponse = Depends(get_current_user),  # descomentar si requiere auth
+    current_user=Depends(auth.get_current_user),
 ):
     """
     Recibe audio por multipart/form-data y devuelve la transcripción normalizada.

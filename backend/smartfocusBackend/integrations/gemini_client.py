@@ -51,12 +51,19 @@ class GeminiClient:
                     "\n2. Si el usuario menciona una materia por nombre, usa 'materia_ref'"
                     "\n3. Las fechas deben estar en formato ISO 'YYYY-MM-DD'"
                     "\n4. Para eventos, usa estado 'pendiente' si no se especifica otro"
-                    "\n5. NO respondas con texto normal, SOLO usa function calls"
+                    "\n5. Para modificar/eliminar eventos puedes usar:"
+                    "\n   - 'evento_id' si se conoce el ID específico"
+                    "\n   - 'evento_ref' con el nombre del evento"
+                    "\n   - 'materia_ref' con el nombre de la materia (si tiene un solo evento)"
+                    "\n   - Combinación de 'evento_ref' y 'materia_ref' para mayor precisión"
+                    "\n6. NO respondas con texto normal, SOLO usa function calls"
                     "\n\nEjemplos:"
                     "\n- 'crear materia matemáticas' → usar create_materia"
                     "\n- 'agregar examen de física para mañana' → usar create_evento"
                     "\n- 'cambiar el nombre de la materia historia' → usar update_materia"
-                    "\n- 'borrar el parcial de química' → usar delete_evento"
+                    "\n- 'borrar el parcial de química' → usar delete_evento con evento_ref='parcial' y materia_ref='química'"
+                    "\n- 'eliminar el evento de matemáticas' → usar delete_evento con materia_ref='matemáticas'"
+                    "\n- 'cambiar fecha del examen de física' → usar update_evento con evento_ref='examen' y materia_ref='física'"
                     ),
             )
             logging.info(f"GeminiClient: Modelo '{model_name}' configurado exitosamente")
@@ -146,30 +153,35 @@ def _tools_definitions() -> List[Dict[str, Any]]:
             },
             {
                 "name": "update_evento",
-                "description": "Actualiza atributos de un evento existente.",
+                "description": "Actualiza atributos de un evento existente. Puede identificar el evento por ID, nombre del evento, o nombre de la materia (si tiene un solo evento).",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "evento_id": {"type": "integer"},
-                        "evento_nombre": {"type": "string"},
-                        "evento_fecha": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"},
+                        "evento_id": {"type": "integer", "description": "ID del evento (preferido si se conoce)"},
+                        "evento_ref": {"type": "string", "description": "Nombre del evento a buscar"},
+                        "materia_ref": {"type": "string", "description": "Nombre de la materia para buscar el evento"},
+                        "evento_nombre": {"type": "string", "description": "Nuevo nombre del evento"},
+                        "evento_fecha": {"type": "string", "description": "Nueva fecha en formato YYYY-MM-DD"},
                         "evento_estado": {
                             "type": "string",
                             "enum": ["pendiente", "aprobado", "desaprobado"],
+                            "description": "Nuevo estado del evento",
                         },
                     },
-                    "required": ["evento_id"],
+                    "required": [],
                 },
             },
             {
                 "name": "delete_evento",
-                "description": "Elimina un evento existente.",
+                "description": "Elimina un evento existente. Puede identificar el evento por ID, nombre del evento, o nombre de la materia (si tiene un solo evento).",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "evento_id": {"type": "integer"},
+                        "evento_id": {"type": "integer", "description": "ID del evento (preferido si se conoce)"},
+                        "evento_ref": {"type": "string", "description": "Nombre del evento a eliminar"},
+                        "materia_ref": {"type": "string", "description": "Nombre de la materia para buscar el evento a eliminar"},
                     },
-                    "required": ["evento_id"],
+                    "required": [],
                 },
             },
         ]
