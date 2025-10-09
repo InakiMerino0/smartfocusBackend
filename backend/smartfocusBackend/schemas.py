@@ -121,7 +121,12 @@ EventoEstado = Literal["pendiente", "aprobado", "desaprobado"]
 
 class EventoBase(BaseModel):
     evento_nombre: str = Field(..., min_length=1, max_length=150)
-    evento_descripcion: Optional[str] = Field(None, max_length=255, description="Descripción opcional del evento")
+    evento_descripcion: Optional[str] = Field(
+        None,
+        max_length=255,
+        description="Descripción opcional del evento",
+        example="Examen parcial: resolver ejercicios 1-10, 90 minutos",
+    )
     evento_fecha: date
     evento_estado: EventoEstado = "pendiente"
 
