@@ -89,17 +89,34 @@ def update_event(
     return ev
 
 
-def get_user_events(db: Session, usuario_id: int) -> List[models.Evento]:
+def get_user_events(
+    db: Session, 
+    usuario_id: int,
+    q: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> List[models.Evento]:
     """
-    Obtiene todos los eventos de todas las materias del usuario.
+    Obtiene todos los eventos de todas las materias del usuario con búsqueda y paginación.
     """
     # Query que une eventos con materias para filtrar por usuario
     stmt = (
         select(models.Evento)
         .join(models.Materia, models.Evento.evento_materia_id == models.Materia.materia_id)
         .where(models.Materia.materia_usuario_id == usuario_id)
-        .order_by(models.Evento.evento_fecha.asc())
     )
+    
+    # Búsqueda por nombre del evento si se proporciona 'q'
+    if q:
+        try:
+            # Postgres: ILIKE para búsqueda insensible a mayúsculas
+            stmt = stmt.where(models.Evento.evento_nombre.ilike(f"%{q}%"))
+        except AttributeError:
+            # Fallback para dialectos sin ilike
+            stmt = stmt.where(models.Evento.evento_nombre.like(f"%{q}%"))
+    
+    # Ordenar por fecha y aplicar paginación
+    stmt = stmt.order_by(models.Evento.evento_fecha.asc()).offset(skip).limit(limit)
     
     return db.execute(stmt).scalars().all()
 
