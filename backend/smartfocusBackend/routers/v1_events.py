@@ -52,8 +52,7 @@ def list_events_endpoint(
 @router.get(
     "/user",
     response_model=List[schemas.EventoResponse],
-    summary="Obtener todos los eventos del usuario autenticado",
-    description="Retorna todos los eventos de todas las materias del usuario logueado (búsqueda/paginado)"
+    summary="Obtener todos los eventos del usuario autenticado (búsqueda/paginado)",
 )
 def get_user_events_endpoint(
     q: Optional[str] = Query(None, description="Buscar por nombre"),
@@ -62,10 +61,7 @@ def get_user_events_endpoint(
     db: Session = Depends(get_db),
     usuario=Depends(auth.get_current_user),
 ):
-    try:
-        return svc.get_user_events(db, usuario.usuario_id, q, skip, limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error obteniendo eventos del usuario: {str(e)}")
+    return svc.get_user_events(db, usuario.usuario_id, q, skip, limit)
 
 
 @router.get(
