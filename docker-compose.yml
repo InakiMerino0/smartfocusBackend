@@ -31,7 +31,7 @@ services:
       - .env
     environment:
       # Asegúrate que DATABASE_URL venga del .env
-      # DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
       PYTHONUNBUFFERED: "1"
     depends_on:
       db:
@@ -52,3 +52,5 @@ volumes:
   # 👉 Reusa EXACTAMENTE el volumen histórico
   smartfocus_db_data:
     external: true
+
+# Si querés crear un volumen NUEVO, comentá el bloque anterior y descomentá este:
