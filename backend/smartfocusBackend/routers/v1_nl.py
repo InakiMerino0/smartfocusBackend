@@ -45,32 +45,6 @@ def get_llm_client() -> GeminiClient:
 
 
 @router.post(
-    "/debug",
-    summary="Endpoint para debuggear respuestas de Gemini",
-)
-def debug_gemini(
-    text: str,
-    llm: GeminiClient = Depends(get_llm_client),
-):
-    """
-    Endpoint temporal para debuggear qué está respondiendo Gemini
-    """
-    try:
-        # Probar directamente la respuesta de Gemini
-        raw_response = llm.debug_prompt(text)
-        tool_calls = llm.get_tool_calls(text)
-        
-        return {
-            "input_text": text,
-            "raw_response": raw_response,
-            "tool_calls": tool_calls,
-            "tool_calls_count": len(tool_calls)
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@router.post(
     "/command",
     response_model=Dict[str, Any],
     summary="Procesa una orden en lenguaje natural (plan / execute)",
@@ -95,52 +69,41 @@ def nl_command(
           * si no, planifica y ejecuta en el mismo request.
     """
     try:
-        logging.info(f"nl_command: Procesando request - mode: {payload.mode}, text: '{payload.text}', usuario_id: {usuario.usuario_id}")
+        logging.info(f"nl_command: {payload.mode} - '{payload.text}' (usuario: {usuario.usuario_id})")
         
         if payload.mode == "plan":
-            logging.info("nl_command: Ejecutando modo plan")
             plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
             result = svc.serialize_plan(plan)
-            logging.info(f"nl_command: Plan generado exitosamente con {len(result.get('actions', []))} acciones")
+            logging.info(f"nl_command: Plan generado con {len(result.get('actions', []))} acciones")
             return result
 
         # execute
-        logging.info("nl_command: Ejecutando modo execute")
-        
         if payload.actions:
             # Verificar si son acciones de ejemplo de Swagger
             if len(payload.actions) == 1 and "additionalProp1" in payload.actions[0]:
-                logging.warning("nl_command: Detectadas acciones de ejemplo de Swagger, ignorando y generando plan automáticamente")
-                logging.info("nl_command: Generando plan para ejecutar")
+                logging.warning("nl_command: Ignorando acciones de ejemplo de Swagger")
                 plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
                 actions = plan.actions
-                logging.info(f"nl_command: Plan generado con {len(actions)} acciones para ejecutar")
             else:
-                logging.info(f"nl_command: Usando acciones predefinidas ({len(payload.actions)} acciones)")
-                logging.info(f"nl_command: Formato de acciones recibidas: {payload.actions}")
+                logging.info(f"nl_command: Usando {len(payload.actions)} acciones predefinidas")
                 try:
                     actions = svc.deserialize_actions(payload.actions)
-                    logging.info(f"nl_command: Acciones deserializadas exitosamente: {[a.kind for a in actions]}")
                 except Exception as e:
                     logging.error(f"nl_command: Error deserializando acciones: {str(e)}")
                     raise ValueError(f"Formato de acciones inválido: {str(e)}")
         else:
-            logging.info("nl_command: Generando plan para ejecutar")
             plan = svc.plan_actions(db, usuario.usuario_id, payload.text, llm)
             actions = plan.actions
-            logging.info(f"nl_command: Plan generado con {len(actions)} acciones para ejecutar")
 
         # Filtrar solo acciones permitidas
         allowed_actions = [a for a in actions if getattr(a, 'allow', True)]
-        logging.info(f"nl_command: {len(allowed_actions)} de {len(actions)} acciones permitidas para ejecución")
         
         if not allowed_actions:
-            logging.warning("nl_command: No hay acciones permitidas para ejecutar")
+            logging.warning(f"nl_command: 0 de {len(actions)} acciones permitidas")
             return {"summary": "No hay acciones válidas para ejecutar", "results": []}
 
-        logging.info(f"nl_command: Ejecutando {len(allowed_actions)} acciones")
         results = svc.execute_actions(db, usuario.usuario_id, allowed_actions)
-        logging.info(f"nl_command: Ejecución completada, {len(results)} resultados")
+        logging.info(f"nl_command: {len(results)} acciones ejecutadas exitosamente")
         
         summary = "Acciones ejecutadas:\n" + "\n".join(f"- {r.get('kind')}" for r in results) if results else "Sin cambios."
 

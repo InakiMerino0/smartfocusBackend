@@ -88,6 +88,21 @@ def update_event(
     return ev
 
 
+def get_user_events(db: Session, usuario_id: int) -> List[models.Evento]:
+    """
+    Obtiene todos los eventos de todas las materias del usuario.
+    """
+    # Query que une eventos con materias para filtrar por usuario
+    stmt = (
+        select(models.Evento)
+        .join(models.Materia, models.Evento.evento_materia_id == models.Materia.materia_id)
+        .where(models.Materia.materia_usuario_id == usuario_id)
+        .order_by(models.Evento.evento_fecha.asc())
+    )
+    
+    return db.execute(stmt).scalars().all()
+
+
 def delete_event(db: Session, usuario_id: int, evento_id: int) -> None:
     ev = _get_evento_autorizado(db, evento_id, usuario_id)
     db.delete(ev)
