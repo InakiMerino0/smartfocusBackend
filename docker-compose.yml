@@ -20,18 +20,18 @@ services:
     restart: unless-stopped
 
   backend:
-    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local: ddd
+    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local:
     image: ${IMAGE_NAME:-ghcr.io/inakimerino0/smartfocus-backend}:${IMAGE_TAG:-latest}
     # Si querés forzar build local, comenta 'image:' y descomenta build:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
     container_name: smartfocus-backend
     env_file:
       - .env
     environment:
       # Asegúrate que DATABASE_URL venga del .env
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
+      # DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
       PYTHONUNBUFFERED: "1"
     depends_on:
       db:
