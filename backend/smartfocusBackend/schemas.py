@@ -135,7 +135,12 @@ class EventoCreate(EventoBase):
 
 class EventoUpdate(BaseModel):
     evento_nombre: Optional[str] = Field(None, min_length=1, max_length=150)
-    evento_descripcion: Optional[str] = Field(None, max_length=255, description="Descripción opcional del evento")
+    evento_descripcion: Optional[str] = Field(
+        None,
+        max_length=255,
+        description="Descripción opcional del evento",
+        example="Examen parcial: resolver ejercicios 1-10, 90 minutos",
+    )
     evento_fecha: Optional[date] = None
     evento_estado: Optional[EventoEstado] = None
 
