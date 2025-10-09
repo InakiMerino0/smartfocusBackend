@@ -8,7 +8,8 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .database import Base
 
 
-class TipoDaltonismo(enum.Enum):
+class TipoDaltonismo(str, enum.Enum):
+    """Tipos de daltonismo soportados por el sistema"""
     normal = "normal"
     protanopia = "protanopia"
     deuteranopia = "deuteranopia"
@@ -110,6 +111,7 @@ class Evento(Base):
         index=True,
     )
     evento_nombre: Mapped[str] = mapped_column(String(150), nullable=False)
+    evento_descripcion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     evento_fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     evento_estado: Mapped[str] = mapped_column(EventoEstadoEnum, nullable=False, server_default="pendiente")
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 import enum
 
 
-class TipoDaltonismo(enum.Enum):
+class TipoDaltonismo(str, enum.Enum):
     normal = "normal"
     protanopia = "protanopia"
     deuteranopia = "deuteranopia"
@@ -54,13 +54,24 @@ class TokenResponse(BaseModel):
 class UsuarioBase(BaseModel):
     usuario_nombre: str = Field(..., min_length=1, max_length=100)
     usuario_email: EmailStr
-    usuario_daltonismo: TipoDaltonismo = Field(default=TipoDaltonismo.normal, description="Tipo de daltonismo del usuario")
 
 class UsuarioCreate(UsuarioBase):
-    """
-    Para registro/seed. Recibe contraseña en claro; el backend la hashea a usuario_password.
-    """
     password: str = Field(..., min_length=6, max_length=128, description="Contraseña en texto plano")
+    usuario_daltonismo: TipoDaltonismo = Field(
+        default=TipoDaltonismo.normal, 
+        description="Tipo de daltonismo del usuario. Opciones: normal, protanopia, deuteranopia, tritanopia, protanomalia, deuteranomalia, tritanomalia",
+        example="normal"
+    )
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "usuario_nombre": "Juan Pérez",
+                "usuario_email": "juan@example.com",
+                "password": "mipassword123",
+                "usuario_daltonismo": "normal"
+            }
+        }
 
 class UsuarioProfileUpdate(BaseModel):
     """
@@ -75,7 +86,7 @@ class UsuarioResponse(ORMModel):
     usuario_id: int
     usuario_nombre: str
     usuario_email: EmailStr
-    usuario_daltonismo: TipoDaltonismo
+    usuario_daltonismo: TipoDaltonismo = Field(default=TipoDaltonismo.normal, description="Tipo de daltonismo del usuario", example="normal")
     usuario_created_at: datetime
 
 
@@ -110,6 +121,7 @@ EventoEstado = Literal["pendiente", "aprobado", "desaprobado"]
 
 class EventoBase(BaseModel):
     evento_nombre: str = Field(..., min_length=1, max_length=150)
+    evento_descripcion: Optional[str] = Field(None, max_length=255, description="Descripción opcional del evento")
     evento_fecha: date
     evento_estado: EventoEstado = "pendiente"
 
@@ -118,6 +130,7 @@ class EventoCreate(EventoBase):
 
 class EventoUpdate(BaseModel):
     evento_nombre: Optional[str] = Field(None, min_length=1, max_length=150)
+    evento_descripcion: Optional[str] = Field(None, max_length=255, description="Descripción opcional del evento")
     evento_fecha: Optional[date] = None
     evento_estado: Optional[EventoEstado] = None
 
@@ -125,6 +138,7 @@ class EventoResponse(ORMModel):
     evento_id: int
     evento_materia_id: int
     evento_nombre: str
+    evento_descripcion: Optional[str] = None
     evento_fecha: date
     evento_estado: EventoEstado
     evento_created_at: datetime

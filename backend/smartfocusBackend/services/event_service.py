@@ -39,6 +39,7 @@ def create_event(db: Session, usuario_id: int, payload: schemas.EventoCreate) ->
     ev = models.Evento(
         evento_materia_id=payload.evento_materia_id,
         evento_nombre=payload.evento_nombre,
+        evento_descripcion=payload.evento_descripcion,
         evento_fecha=payload.evento_fecha,
         evento_estado=payload.evento_estado,
     )

@@ -631,6 +631,7 @@ def execute_actions(
                 evento_dict = {
                     "evento_id": e.evento_id,
                     "evento_nombre": e.evento_nombre,
+                    "evento_descripcion": e.evento_descripcion,
                     "evento_fecha": e.evento_fecha.isoformat() if e.evento_fecha else None,
                     "evento_estado": e.evento_estado,
                     "evento_materia_id": e.evento_materia_id,
@@ -650,6 +651,7 @@ def execute_actions(
                 evento_dict = {
                     "evento_id": e.evento_id,
                     "evento_nombre": e.evento_nombre,
+                    "evento_descripcion": e.evento_descripcion,
                     "evento_fecha": e.evento_fecha.isoformat() if e.evento_fecha else None,
                     "evento_estado": e.evento_estado,
                     "evento_materia_id": e.evento_materia_id,

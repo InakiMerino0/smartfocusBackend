@@ -40,10 +40,10 @@ class GeminiClient:
                     "Eres un asistente especializado en gestión académica. Tu tarea es analizar las instrucciones "
                     "del usuario y SIEMPRE usar las funciones (tools) disponibles para realizar las acciones solicitadas. "
                     "\n\nFunciones disponibles:"
-                    "\n- create_materia: crear nuevas materias"
+                    "\n- create_materia: crear nuevas materias (con descripción opcional)"
                     "\n- update_materia: modificar materias existentes"
                     "\n- delete_materia: eliminar materias"
-                    "\n- create_evento: crear eventos (exámenes, parciales, etc.)"
+                    "\n- create_evento: crear eventos (exámenes, parciales, etc.) con descripción opcional"
                     "\n- update_evento: modificar eventos existentes"
                     "\n- delete_evento: eliminar eventos"
                     "\n\nREGLAS IMPORTANTES:"
@@ -51,15 +51,17 @@ class GeminiClient:
                     "\n2. Si el usuario menciona una materia por nombre, usa 'materia_ref'"
                     "\n3. Las fechas deben estar en formato ISO 'YYYY-MM-DD'"
                     "\n4. Para eventos, usa estado 'pendiente' si no se especifica otro"
-                    "\n5. Para modificar/eliminar eventos puedes usar:"
+                    "\n5. Incluye descripciones cuando el usuario proporcione detalles adicionales sobre eventos o materias"
+                    "\n6. Para modificar/eliminar eventos puedes usar:"
                     "\n   - 'evento_id' si se conoce el ID específico"
                     "\n   - 'evento_ref' con el nombre del evento"
                     "\n   - 'materia_ref' con el nombre de la materia (si tiene un solo evento)"
                     "\n   - Combinación de 'evento_ref' y 'materia_ref' para mayor precisión"
-                    "\n6. NO respondas con texto normal, SOLO usa function calls"
+                    "\n7. NO respondas con texto normal, SOLO usa function calls"
                     "\n\nEjemplos:"
                     "\n- 'crear materia matemáticas' → usar create_materia"
                     "\n- 'agregar examen de física para mañana' → usar create_evento"
+                    "\n- 'crear parcial de álgebra con calculadora permitida para el viernes' → usar create_evento con descripción"
                     "\n- 'cambiar el nombre de la materia historia' → usar update_materia"
                     "\n- 'borrar el parcial de química' → usar delete_evento con evento_ref='parcial' y materia_ref='química'"
                     "\n- 'eliminar el evento de matemáticas' → usar delete_evento con materia_ref='matemáticas'"
@@ -140,7 +142,8 @@ def _tools_definitions() -> List[Dict[str, Any]]:
                     "properties": {
                         "evento_materia_id": {"type": "integer", "description": "ID de la materia"},
                         "materia_ref": {"type": "string", "description": "Nombre de la materia si no hay ID"},
-                        "evento_nombre": {"type": "string"},
+                        "evento_nombre": {"type": "string", "description": "Nombre del evento"},
+                        "evento_descripcion": {"type": "string", "description": "Descripción opcional del evento"},
                         "evento_fecha": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"},
                         "evento_estado": {
                             "type": "string",
@@ -161,6 +164,7 @@ def _tools_definitions() -> List[Dict[str, Any]]:
                         "evento_ref": {"type": "string", "description": "Nombre del evento a buscar"},
                         "materia_ref": {"type": "string", "description": "Nombre de la materia para buscar el evento"},
                         "evento_nombre": {"type": "string", "description": "Nuevo nombre del evento"},
+                        "evento_descripcion": {"type": "string", "description": "Nueva descripción del evento"},
                         "evento_fecha": {"type": "string", "description": "Nueva fecha en formato YYYY-MM-DD"},
                         "evento_estado": {
                             "type": "string",
