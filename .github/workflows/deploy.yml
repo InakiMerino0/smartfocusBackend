@@ -42,7 +42,6 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -60,7 +59,6 @@ jobs:
           chmod 600 ~/.ssh/ec2_key
           ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
-
       # 📦 Subir docker-compose.yml al servidor
       - name: Upload docker-compose.yml to EC2
         run: |
@@ -69,7 +67,6 @@ jobs:
           scp -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
             docker-compose.yml \
             "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
-
       # 🌱 (Opcional) crear .env en el servidor desde secrets
       - name: (Optional) Update .env on EC2 from secrets
         env:
@@ -83,7 +80,6 @@ jobs:
           DB_PASS=${DB_PASS}
           DB_NAME=${DB_NAME}
           EOF'"
-
       # 🚀 Desplegar
       - name: SSH & Deploy
         env:
@@ -102,21 +98,17 @@ jobs:
              bash -s" << 'EOSSH'
           set -euo pipefail
           cd "$REMOTE_APP_DIR"
-
           echo ">>> Logging in to GHCR as $GHCR_USER"
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-
           echo ">>> Deploying ghcr.io/inakimerino0/smartfocus-backend:$IMAGE_TAG"
           docker compose pull backend
           docker compose up -d --remove-orphans
-
           cid="$(docker compose ps -q backend || true)"
           if [ -n "$cid" ]; then
             img_id="$(docker inspect -f '{{.Image}}' "$cid")"
             echo ">> Image ID: $img_id"
             docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
           fi
-
           curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
           docker image prune -f || true
           EOSSH
