@@ -403,6 +403,14 @@ def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResul
     if actions:
         summary_lines.append("📋 ACCIONES PLANIFICADAS:")
         
+        # Detectar materias que serán creadas para resolver dependencias futuras
+        materias_to_be_created = {}
+        for a in actions:
+            if a.kind == "create_materia" and getattr(a, 'allow', True):
+                materia_nombre = a.args.get("materia_nombre", "")
+                if materia_nombre:
+                    materias_to_be_created[materia_nombre] = True
+        
         for a in actions:
             a.allow = True
             a.resolved = {}
@@ -442,13 +450,36 @@ def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResul
                 mid = args.get("evento_materia_id")
                 nombre = args.get("evento_nombre", "")
                 fecha_val = args.get("evento_fecha")
+                
+                # Si no hay materia_id, pero hay materia_ref, intentar resolverlo
+                if not mid:
+                    materia_ref = args.get("materia_ref")
+                    if materia_ref:
+                        # Verificar si la materia será creada en esta misma ejecución
+                        if materia_ref in materias_to_be_created:
+                            logging.info(f"plan_actions: Evento para materia '{materia_ref}' será creada en esta ejecución")
+                            summary_lines.append(f"   ✔ Crear evento '{nombre}' ({fecha_val}) en materia '{materia_ref}': permitido (materia será creada).")
+                            a.resolved["materia_ref"] = materia_ref
+                            a.resolved["will_be_created"] = True
+                            continue
+                        else:
+                            # Buscar materia existente
+                            materia = _find_materia_by_name(usuario_id, materia_ref)
+                            if materia:
+                                mid = materia.materia_id
+                                a.resolved["materia_id"] = mid
+                
                 a.resolved["materia_id"] = mid
 
                 m_ok = bool(mid and db.get(models.Materia, mid))
-                if not m_ok:
+                if not m_ok and not a.resolved.get("will_be_created"):
                     a.allow = False
                     a.conflict = "Materia no existe; no se puede crear el evento."
-                    summary_lines.append(f"   ✖ Crear evento '{nombre}': materia #{mid} no existe.")
+                    materia_ref = args.get("materia_ref", "sin especificar")
+                    summary_lines.append(f"   ✖ Crear evento '{nombre}': materia '{materia_ref}' no existe.")
+                elif a.resolved.get("will_be_created"):
+                    # Ya se manejo arriba, no hacer nada más
+                    pass
                 else:
                     ev = _find_evento_by_natural_key(mid, nombre, fecha_val)
                     a.resolved["evento_id"] = ev.evento_id if ev else None
@@ -465,7 +496,7 @@ def plan_actions(db: Session, usuario_id: int, user_text: str, llm) -> PlanResul
 
             elif kind in ("update_evento", "delete_evento"):
                 evid = args.get("evento_id")
-                a.resolved["evento_id"] = evid  # ← corregido el typo
+                a.resolved["evento_id"] = evid
                 ev = db.get(models.Evento, evid) if evid else None
                 if not ev:
                     a.allow = False
@@ -509,16 +540,24 @@ def execute_actions(
     """
     Ejecuta las acciones usando los servicios de dominio.
     Retorna una lista de resultados serializables.
-    NUEVA FUNCIONALIDAD: Procesa acciones de manera independiente,
-    continuando con las siguientes aunque alguna falle.
+    NUEVA FUNCIONALIDAD: 
+    - Procesa acciones de manera independiente, continuando aunque algunas fallen
+    - Resuelve dependencias automáticamente (crear materia antes que eventos de esa materia)
     """
     logging.info(f"execute_actions: Ejecutando {len(actions)} acciones para usuario {usuario_id}")
     results: List[Dict[str, Any]] = []
     execution_errors: List[str] = []
 
-    for i, a in enumerate(actions):
+    # Separar acciones por tipo y ordenar por dependencias
+    ordered_actions = _order_actions_by_dependencies(actions)
+    logging.info(f"execute_actions: Acciones reordenadas por dependencias: {[a.kind for a in ordered_actions]}")
+
+    # Mapear nombres de materias a IDs creados durante la ejecución
+    created_materias: Dict[str, int] = {}
+
+    for i, a in enumerate(ordered_actions):
         try:
-            logging.info(f"execute_actions: Procesando acción {i+1}/{len(actions)}: {a.kind}")
+            logging.info(f"execute_actions: Procesando acción {i+1}/{len(ordered_actions)}: {a.kind}")
             
             # Verificar que la acción esté permitida
             if not getattr(a, 'allow', True):
@@ -533,11 +572,21 @@ def execute_actions(
                 })
                 continue
 
+            # Resolver dependencias dinámicamente para eventos
+            if a.kind in ("create_evento", "update_evento", "delete_evento"):
+                a.args = _resolve_materia_dependencies(a.args, created_materias, db, usuario_id)
+
             # Ejecutar según el tipo de acción
             if a.kind == "create_materia":
                 logging.info(f"execute_actions: Creando materia con args: {a.args}")
                 payload = schemas.MateriaCreate(**a.args)
                 m = subject_service.create_subject(db, usuario_id, payload)
+                
+                # Registrar la materia creada para futuras referencias
+                materia_nombre = m.materia_nombre
+                created_materias[materia_nombre] = m.materia_id
+                logging.info(f"execute_actions: Materia '{materia_nombre}' creada con ID {m.materia_id}")
+                
                 # Convertir el objeto ORM a diccionario serializable
                 materia_dict = {
                     "materia_id": m.materia_id,
@@ -658,6 +707,54 @@ def execute_actions(
         results.append(summary_result)
     
     return results
+
+
+def _order_actions_by_dependencies(actions: List[PlannedAction]) -> List[PlannedAction]:
+    """
+    Ordena las acciones por dependencias para evitar errores de referencias.
+    Prioridad: create_materia > create_evento > update_* > delete_evento > delete_materia
+    """
+    priority_order = {
+        "create_materia": 1,
+        "create_evento": 2, 
+        "update_materia": 3,
+        "update_evento": 4,
+        "delete_evento": 5,
+        "delete_materia": 6
+    }
+    
+    return sorted(actions, key=lambda a: priority_order.get(a.kind, 99))
+
+
+def _resolve_materia_dependencies(
+    args: Dict[str, Any], 
+    created_materias: Dict[str, int], 
+    db: Session, 
+    usuario_id: int
+) -> Dict[str, Any]:
+    """
+    Resuelve referencias de materias usando IDs de materias recién creadas o existentes.
+    """
+    args_copy = args.copy()
+    
+    # Si hay materia_ref pero no materia_id, intentar resolverlo
+    if "materia_ref" in args_copy and not args_copy.get("evento_materia_id"):
+        materia_ref = args_copy["materia_ref"]
+        
+        # Primero buscar en materias recién creadas
+        if materia_ref in created_materias:
+            args_copy["evento_materia_id"] = created_materias[materia_ref]
+            logging.info(f"_resolve_materia_dependencies: Resolviendo materia_ref '{materia_ref}' con ID recién creado: {created_materias[materia_ref]}")
+        else:
+            # Buscar en base de datos
+            materia = _get_materia_by_name(db, usuario_id, materia_ref)
+            if materia:
+                args_copy["evento_materia_id"] = materia.materia_id
+                logging.info(f"_resolve_materia_dependencies: Resolviendo materia_ref '{materia_ref}' con ID existente: {materia.materia_id}")
+            else:
+                logging.warning(f"_resolve_materia_dependencies: No se pudo resolver materia_ref '{materia_ref}'")
+    
+    return args_copy
 
 
 # Helpers para (de)serializar acciones para la API
