@@ -2,38 +2,43 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:15           # <-- usa la misma mayor del volumen viejo
+    image: postgres:15
     container_name: smartfocus-db
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # 👉 apuntamos al volumen HISTÓRICO
+      - smartfocus_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME} -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
-      retries: 12
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      retries: 20
+      start_period: 10s
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/inakimerino0/smartfocus-backend:${IMAGE_TAG}
-    pull_policy: always
-    env_file: [.env]
+    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local:
+    image: ${IMAGE_NAME:-ghcr.io/inakimerino0/smartfocus-backend}:${IMAGE_TAG:-latest}
+    # Si querés forzar build local, comenta 'image:' y descomenta build:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartfocus-backend
+    env_file:
+      - .env
     environment:
+      # Asegúrate que DATABASE_URL venga del .env
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
-    ports: ["8000:8000"]
+      PYTHONUNBUFFERED: "1"
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
-    cap_drop: [ALL]
+    ports:
+      - "8000:8000"
+    # Opcionales de seguridad/recursos (dejé suaves)
     security_opt:
       - no-new-privileges:true
     logging:
@@ -41,10 +46,9 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    mem_limit: "512m"
-    cpus: "0.50"
+    restart: unless-stopped
 
 volumes:
-  pgdata:
+  # 👉 Reusa EXACTAMENTE el volumen histórico
+  smartfocus_db_data:
     external: true
-    name: smartfocus_db_data   # <-- tu volumen viejo
