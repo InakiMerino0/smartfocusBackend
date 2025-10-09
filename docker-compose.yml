@@ -9,8 +9,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      # 👉 apuntamos al volumen HISTÓRICO
       - smartfocus_db_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"   # ← sólo escucha dentro de la EC2 (no público)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME} -h 127.0.0.1"]
       interval: 5s
@@ -19,13 +20,14 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+
   backend:
-    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local: ddd
+    # Usa imagen publicada (GHCR) si IMAGE_TAG está seteado; si no, build local:
     image: ${IMAGE_NAME:-ghcr.io/inakimerino0/smartfocus-backend}:${IMAGE_TAG:-latest}
     # Si querés forzar build local, comenta 'image:' y descomenta build:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    # build:
+    #   context: ./backend
+    #   dockerfile: Dockerfile
     container_name: smartfocus-backend
     env_file:
       - .env
@@ -52,3 +54,5 @@ volumes:
   # 👉 Reusa EXACTAMENTE el volumen histórico
   smartfocus_db_data:
     external: true
+
+

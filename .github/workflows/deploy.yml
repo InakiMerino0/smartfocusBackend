@@ -1,4 +1,4 @@
-name: Deploy to EC2 (GHCR)
+name: Deploy to EC2
 
 on:
   push:
@@ -6,117 +6,69 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 env:
-  IMAGE_NAME: ghcr.io/inakimerino0/smartfocus-backend
-  EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com
+  EC2_HOST: ec2-18-116-90-219.us-east-2.compute.amazonaws.com   # tu host actual
   EC2_USER: ${{ secrets.EC2_USER }}
-  REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
+  APP_DIR: /home/ubuntu/SmartFocus
+  IMAGE_NAME: ghcr.io/inakimerino0/smartfocus-backend
+  IMAGE_TAG: latest
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & Push image (context ./backend)
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          build-args: |
-            COMMIT_SHA=${{ github.sha }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-
   deploy:
-    needs: build-and-push
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 🔐 Crear clave privada temporal para conectar al EC2
-      - name: Setup SSH key + known_hosts
-        env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_key
-          chmod 600 ~/.ssh/ec2_key
-          ssh-keyscan -H "${{ env.EC2_HOST }}" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
+          echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
-      # 📦 Subir docker-compose.yml al servidor
-      - name: Upload docker-compose.yml to EC2
+      - name: Generate .env (from Secrets)
         run: |
-          ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "mkdir -p '${{ env.REMOTE_APP_DIR }}'"
-          scp -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
-            docker-compose.yml \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${{ env.REMOTE_APP_DIR }}/docker-compose.yml"
+          : > .env
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASS=${{ secrets.DB_PASS }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
+          echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> .env
+          echo "JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}" >> .env
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}" >> .env
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" >> .env
+          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
 
-      # 🌱 (Opcional) crear .env en el servidor desde secrets
-      - name: (Optional) Update .env on EC2 from secrets
-        env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASS: ${{ secrets.DB_PASS }}
-          DB_NAME: ${{ secrets.DB_NAME }}
+      - name: Rsync code (exclude local .env/.git)
         run: |
-          ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" "bash -lc 'cat > \"${{ env.REMOTE_APP_DIR }}/.env\" << EOF
-          DB_USER=${DB_USER}
-          DB_PASS=${DB_PASS}
-          DB_NAME=${DB_NAME}
-          EOF'"
+          rsync -az --delete \
+            --exclude='.git' --exclude='.env' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            ./ "$EC2_USER@$EC2_HOST:$APP_DIR/"
 
-      # 🚀 Desplegar
-      - name: SSH & Deploy
-        env:
-          # Tus variables: definilas en el workflow (env) o como secrets
-          GHCR_USER: ${{ secrets.GHCR_USER }}          # ej: inakimerino0
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}    # token con permisos a GHCR
-          IMAGE_TAG: ${{ github.sha }}             # tag inmutable por commit
+      - name: Upload .env
         run: |
-          echo ">>> SSH & Deploy..."
-          ssh -i ~/.ssh/ec2_key -o IdentitiesOnly=yes \
-            "${{ env.EC2_USER }}@${{ env.EC2_HOST }}" \
-            "export REMOTE_APP_DIR='${{ env.REMOTE_APP_DIR }}'; \
-             export IMAGE_TAG='${{ env.IMAGE_TAG }}'; \
-             export GHCR_USER='${{ env.GHCR_USER }}'; \
-             export GHCR_TOKEN='${{ env.GHCR_TOKEN }}'; \
-             bash -s" << 'EOSSH'
-          set -euo pipefail
-          cd "$REMOTE_APP_DIR"
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes ./.env \
+            "$EC2_USER@$EC2_HOST:$APP_DIR/.env"
 
-          echo ">>> Logging in to GHCR as $GHCR_USER"
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      - name: Compose pull / build & up
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" "
+            set -e
+            cd $APP_DIR
+            docker compose pull || true       # si usás imagen GHCR
+            # docker compose build --pull      # si preferís build local del backend, descomenta
+            docker compose up -d --remove-orphans
+            docker compose ps
+          "
 
-          echo ">>> Deploying ghcr.io/inakimerino0/smartfocus-backend:$IMAGE_TAG"
-          docker compose pull backend
-          docker compose up -d --remove-orphans
 
-          cid="$(docker compose ps -q backend || true)"
-          if [ -n "$cid" ]; then
-            img_id="$(docker inspect -f '{{.Image}}' "$cid")"
-            echo ">> Image ID: $img_id"
-            docker image inspect "$img_id" --format 'ID={{.Id}} Labels={{json .Config.Labels}}' || true
-          fi
 
-          curl -fsS http://127.0.0.1:8000/docs >/dev/null || true
-          docker image prune -f || true
-          EOSSH
