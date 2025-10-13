@@ -29,9 +29,9 @@ jobs:
       - name: Build & Push (tag = SHA)
         run: |
           docker build \
-            -f SmartFocus/backend/Dockerfile \
+            -f backend/Dockerfile \
             --build-arg COMMIT_SHA=${{ github.sha }} \
-            -t $IMAGE_NAME:${{ github.sha }} SmartFocus/backend
+            -t $IMAGE_NAME:${{ github.sha }} backend
           docker push $IMAGE_NAME:${{ github.sha }}
 
 
