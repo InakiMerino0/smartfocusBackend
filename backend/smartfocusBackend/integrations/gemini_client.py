@@ -26,7 +26,7 @@ class GeminiClient:
             raise RuntimeError("GEMINI_API_KEY no configurada.")
             logging.info("GeminiClient: GEMINI_API_KEY no configurada en el entorno")
 
-        model_name = "gemini-2.5-pro"
+        model_name = "gemini-2.5-flash"
         
         genai.configure(api_key=api_key)
 
@@ -38,7 +38,7 @@ class GeminiClient:
                 tools=tools,
                 system_instruction=(
                     "Eres un asistente especializado en gestión académica. Tu tarea es analizar las instrucciones "
-                    "del usuario y SIEMPRE usar las funciones (tools) disponibles para realizar las acciones solicitadas. "
+                    "del usuario y usar las funciones que el usuario indique (tools) disponibles para realizar las acciones solicitadas. "
                     "\n\nFunciones disponibles:"
                     "\n- create_materia: crear nuevas materias (con descripción opcional)"
                     "\n- update_materia: modificar materias existentes"
@@ -47,7 +47,7 @@ class GeminiClient:
                     "\n- update_evento: modificar eventos existentes"
                     "\n- delete_evento: eliminar eventos"
                     "\n\nREGLAS IMPORTANTES:"
-                    "\n1. SIEMPRE usa function calls para responder a las solicitudes del usuario"
+                    "\n1. SIEMPRE QUE SE ESPECIFIQUEN (no deben ser necesariamente especificadas textualmente iguales a como se encuentran en la base de datos) usa function calls para responder a las solicitudes del usuario"
                     "\n2. Si el usuario menciona una materia por nombre, usa 'materia_ref'"
                     "\n3. Las fechas deben estar en formato ISO 'YYYY-MM-DD'"
                     "\n4. Para eventos, usa estado 'pendiente' si no se especifica otro"

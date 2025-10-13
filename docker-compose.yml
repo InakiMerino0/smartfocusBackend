@@ -79,5 +79,3 @@ services:
 volumes:
   smartfocus_db_data:
     external: true
-
-# 
