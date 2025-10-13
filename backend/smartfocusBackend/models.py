@@ -111,7 +111,7 @@ class Evento(Base):
         index=True,
     )
     evento_nombre: Mapped[str] = mapped_column(String(150), nullable=False)
-    evento_descripcion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    evento_descripcion: Mapped[str] = mapped_column(String(255), nullable=False)
     evento_fecha: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     evento_estado: Mapped[str] = mapped_column(EventoEstadoEnum, nullable=False, server_default="pendiente")
 
