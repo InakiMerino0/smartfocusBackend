@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="SmartFocus Backend",
+    title="SmartFocus Backend V2",
     description="Autenticación de usuarios, gestión de eventos y materias con IA",
     version="1.0"
 )
