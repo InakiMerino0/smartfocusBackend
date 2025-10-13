@@ -50,7 +50,7 @@ def list_events_endpoint(
 
 
 @router.get(
-    "",
+    "/user",
     response_model=List[schemas.EventoResponse],
     summary="Obtener todos los eventos del usuario autenticado (búsqueda/paginado)",
 )
