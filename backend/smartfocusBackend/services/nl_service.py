@@ -207,6 +207,10 @@ def _normalize_tool_call(
             evento_nombre = args.get("evento_nombre")
             evento_fecha = args.get("evento_fecha")   # se espera 'YYYY-MM-DD'
             evento_estado = args.get("evento_estado", "pendiente")
+            # Aceptar descripcion si viene en los args (puede ser None)
+            evento_descripcion = args.get("evento_descripcion")
+            if isinstance(evento_descripcion, str):
+                evento_descripcion = evento_descripcion.strip() or None
             
             # Validar datos requeridos
             validation_errors = []
@@ -228,6 +232,7 @@ def _normalize_tool_call(
                             args={
                                 "evento_materia_id": materia_id,
                                 "evento_nombre": evento_nombre.strip(),
+                                "evento_descripcion": evento_descripcion,
                                 "evento_fecha": evento_fecha,  # string ISO; FastAPI lo parsea a date
                                 "evento_estado": evento_estado,
                             },
@@ -263,7 +268,7 @@ def _normalize_tool_call(
                 try:
                     _ensure_ownership_evento(db, usuario_id, int(evento_id))
                     update_args = {}
-                    for k in ("evento_nombre", "evento_fecha", "evento_estado"):
+                    for k in ("evento_nombre", "evento_fecha", "evento_estado", "evento_descripcion"):
                         if k in args and args[k] is not None:
                             update_args[k] = args[k]
                     out.append(
