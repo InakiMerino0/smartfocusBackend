@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, delete as sa_delete
 
 from .. import models, schemas
 
@@ -125,3 +125,25 @@ def delete_event(db: Session, usuario_id: int, evento_id: int) -> None:
     ev = _get_evento_autorizado(db, evento_id, usuario_id)
     db.delete(ev)
     db.commit()
+
+
+def delete_events_by_materia(db: Session, usuario_id: int, materia_id: int) -> int:
+    """
+    Elimina todos los eventos de una materia (verifica ownership).
+    Retorna la cantidad de eventos eliminados.
+    """
+    # Asegurar que la materia pertenece al usuario
+    _assert_materia_propia(db, materia_id, usuario_id)
+
+    # Borrar en bloque
+    stmt = sa_delete(models.Evento).where(models.Evento.evento_materia_id == materia_id)
+    res = db.execute(stmt)
+    db.commit()
+
+    # rowcount puede ser None dependiendo del driver; manejar ese caso
+    try:
+        deleted = int(res.rowcount) if getattr(res, 'rowcount', None) is not None else 0
+    except Exception:
+        deleted = 0
+
+    return deleted

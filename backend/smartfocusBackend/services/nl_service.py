@@ -19,6 +19,7 @@ ActionKind = Literal[
     "create_evento",
     "update_evento",
     "delete_evento",
+    "delete_eventos_materia",
 ]
 
 @dataclass
@@ -315,6 +316,35 @@ def _normalize_tool_call(
                     )
                 except ValueError as e:
                     errors.append(f"Eliminar evento: {str(e)}")
+
+        # Nueva acción: eliminar todos los eventos de una materia
+        # Se activa si el LLM indica explícitamente 'all' o 'todos' mediante
+        # args['all']=True o args['delete_all']=True, o si el nombre de la tool
+        # es 'delete_eventos_materia'.
+        elif name == "delete_eventos_materia" or args.get("all") or args.get("delete_all"):
+            # preferimos materia_id, si no intentar resolver por materia_ref
+            materia_id = args.get("materia_id")
+            if not materia_id:
+                materia_ref = args.get("materia_ref")
+                materia_id = materia_ref_to_id(materia_ref)
+
+            if not materia_id:
+                # Si hay materia_ref y existe exactamente una materia con ese nombre,
+                # materia_ref_to_id ya lo resuelve. Si no, reportar error.
+                errors.append("Eliminar eventos: no se pudo identificar la materia (falta materia_id o materia_ref válido)")
+            else:
+                try:
+                    # verificar que la materia pertenece al usuario
+                    _ensure_ownership_materia(db, usuario_id, materia_id)
+                    out.append(
+                        PlannedAction(
+                            kind="delete_eventos_materia",
+                            args={"materia_id": materia_id},
+                            description=f"Eliminar todos los eventos de la materia #{materia_id}",
+                        )
+                    )
+                except ValueError as e:
+                    errors.append(f"Eliminar eventos: {str(e)}")
 
         else:
             if name:
@@ -671,6 +701,17 @@ def execute_actions(
                 event_service.delete_event(db, usuario_id, evid)
                 results.append({"kind": a.kind, "status": "success", "deleted": {"evento_id": evid}})
                 logging.info(f"execute_actions: Evento {evid} eliminado exitosamente")
+                
+            elif a.kind == "delete_eventos_materia":
+                mid = a.args.get("materia_id")
+                logging.info(f"execute_actions: Eliminando todos los eventos de la materia {mid}")
+                try:
+                    deleted_count = event_service.delete_events_by_materia(db, usuario_id, int(mid))
+                    results.append({"kind": a.kind, "status": "success", "deleted_count": deleted_count})
+                    logging.info(f"execute_actions: Eliminados {deleted_count} eventos de la materia {mid}")
+                except Exception as e:
+                    logging.error(f"execute_actions: Error eliminando eventos de la materia {mid}: {str(e)}", exc_info=True)
+                    results.append({"kind": a.kind, "status": "error", "error": str(e), "description": a.description})
                 
             else:
                 logging.warning(f"execute_actions: Tipo de acción desconocido: {a.kind}")
