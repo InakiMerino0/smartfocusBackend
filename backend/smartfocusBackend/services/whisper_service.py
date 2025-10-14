@@ -1,104 +1,110 @@
-import mimetypes
-from typing import Any, Dict, Optional, Tuple, Literal
+import os
+from typing import Any, Dict, Optional
 
+import httpx
 from fastapi import HTTPException, UploadFile
-from starlette.status import HTTP_400_BAD_REQUEST, HTTP_502_BAD_GATEWAY
+from starlette.status import HTTP_400_BAD_REQUEST
 
-from ..integrations.whisper_client import WhisperClient, WhisperAPIError
+from ..integrations.whisper_client import WhisperClient
 
-# Políticas básicas
-ALLOWED_MIME = {
-    "audio/mpeg",     # .mp3
-    "audio/mp3",
-    "audio/mp4",      # .mp4 (a veces contenedor audio)
-    "audio/m4a",      # .m4a
-    "audio/x-m4a",
-    "audio/wav",      # .wav
-    "audio/webm",     # .webm
-    "audio/ogg",      # .ogg
-}
-MAX_AUDIO_MB = 25  # límite razonable para STT remoto
-
-ResponseFormat = Literal["json", "verbose_json", "text", "srt", "vtt"]
+MAX_AUDIO_MB = 3  # límite para chat
 
 
-def _guess_content_type(filename: str, fallback: str = "application/octet-stream") -> str:
-    ctype, _ = mimetypes.guess_type(filename)
-    return ctype or fallback
-
-
-async def transcribe_audio(
+async def process_audio_with_nl(
     *,
     file: UploadFile,
-    language: Optional[str] = None,
-    response_format: ResponseFormat = "json",
-    model: str = "whisper-1",
+    language: Optional[str] = "es",
+    user_token: str,  # JWT token para autenticación con NL endpoint
 ) -> Dict[str, Any]:
     """
-    Orquesta:
-    - valida archivo (MIME/tamaño)
-    - llama a integrations/WhisperClient
-    - normaliza respuesta a shape estable
+    Flujo completo:
+    1. Valida archivo
+    2. Transcribe con WhisperClient
+    3. Consume ENDPOINT de v1_nl.py vía HTTP
+    4. Devuelve resultado combinado
     """
-    # Validar content-type (mejor usar el enviado por el cliente si es fiable; sino, inferir)
-    filename = file.filename or "audio"
-    content_type = file.content_type or _guess_content_type(filename)
+    # Validar content-type
+    content_type = file.content_type or "application/octet-stream"
 
-    if content_type not in ALLOWED_MIME:
-        # Permitimos wav aunque algunos mimetypes lo devuelven como "audio/x-wav"
-        if not (content_type in ("audio/x-wav",) and "audio/wav" in ALLOWED_MIME):
-            raise HTTPException(
-                status_code=HTTP_400_BAD_REQUEST,
-                detail=f"Tipo de archivo no permitido: {content_type}",
-            )
-
-    # Cargar en memoria y validar tamaño
+    # Validar tamaño
     content_bytes = await file.read()
     size_mb = len(content_bytes) / (1024 * 1024)
+    
     if size_mb > MAX_AUDIO_MB:
         raise HTTPException(
             status_code=HTTP_400_BAD_REQUEST,
-            detail=f"El archivo supera el máximo permitido de {MAX_AUDIO_MB} MB",
+            detail=f"El archivo supera el máximo permitido de {MAX_AUDIO_MB} MB"
         )
-
+    
+    # Resetear el archivo para WhisperClient
+    file.file.seek(0)
+    
+    # 1. TRANSCRIBIR AUDIO
     client = WhisperClient()
-    try:
-        payload, request_id = await client.transcribe(
-            file_tuple=(filename, content_bytes, content_type),
-            model=model,
-            language=language,
-            response_format=response_format,
-        )
-    except WhisperAPIError as e:
-        # Aquí podrías mapear a tu "error envelope" si ya lo tenés
+    transcribed_text = await client.transcribe(file=file, language=language)
+    
+    if not transcribed_text:
         raise HTTPException(
-            status_code=HTTP_502_BAD_GATEWAY,
-            detail={"message": "Falla al transcribir audio", "upstream_status": e.status_code, "upstream": e.details},
+            status_code=HTTP_400_BAD_REQUEST,
+            detail="No se pudo transcribir texto del audio proporcionado"
         )
-    finally:
-        await client.close()
-
-    # Normalizar shape de respuesta
-    result: Dict[str, Any] = {
-        "model": model,
-        "request_id": request_id,
+    
+    # 2. CONSUMIR ENDPOINT DE NL (como si fuera el frontend)
+    nl_result = await _call_nl_endpoint(transcribed_text, user_token)
+    
+    # 3. COMBINAR RESULTADOS
+    return {
+        "transcribed_text": transcribed_text,
+        "language": language,
+        "summary": nl_result.get("summary", "Procesado correctamente"),
+        "results": nl_result.get("results", [])
     }
 
-    if isinstance(payload, dict):  # json / verbose_json
-        # Campos comunes esperables
-        result["text"] = payload.get("text", "")
-        if "language" in payload:
-            result["language"] = payload["language"]
-        if "duration" in payload:
-            result["duration_sec"] = payload["duration"]
-        if "segments" in payload:
-            # Mantener la estructura tal cual la retorna Whisper (start, end, text, etc.)
-            result["segments"] = payload["segments"]
-    else:
-        # text / srt / vtt → devolvemos en el campo 'raw'
-        # y dejamos 'text' vacío para no inducir a error
-        result["text"] = ""
-        result["raw"] = payload
-        result["format"] = response_format
+# Peticion al endpoint NL
+async def _call_nl_endpoint(text: str, user_token: str) -> Dict[str, Any]:
 
-    return result
+    base_url = os.getenv("http://18.116.90.219/")
+    
+    # Payload JSON como lo haría el frontend
+    payload = {
+        "text": text,
+        "mode": "execute"
+    }
+    
+    # Headers con autenticación
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {user_token}"
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{base_url}/api/v1/nl/command",
+                json=payload,
+                headers=headers,
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                # Si falla NL, devolver error pero texto transcrito OK
+                return {
+                    "summary": f"{response.status_code}. Texto transcrito correctamente.",
+                    "results": [],
+                    "nl_error": response.text
+                }
+                
+    except httpx.RequestError as e:
+        return {
+            "summary": f"Error conectando con servicio NL: {str(e)}. Texto transcrito correctamente.",
+            "results": [],
+            "nl_error": str(e)
+        }
+    except Exception as e:
+        return {
+            "summary": f"Error inesperado con NL: {str(e)}. Texto transcrito correctamente.",
+            "results": [],
+            "nl_error": str(e)
+        }

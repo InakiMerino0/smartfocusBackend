@@ -38,7 +38,6 @@ class NLExecuteResponse(BaseModel):
 
 def get_llm_client() -> GeminiClient:
     """
-    Factory muy simple para inyectar el cliente Gemini.
     Lee GEMINI_API_KEY / GEMINI_MODEL del entorno.
     """
     return GeminiClient()

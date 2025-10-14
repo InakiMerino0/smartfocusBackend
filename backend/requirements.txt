@@ -9,4 +9,4 @@ python-jose[cryptography]
 email-validator
 google-generativeai
 httpx>=0.27
-
+openai

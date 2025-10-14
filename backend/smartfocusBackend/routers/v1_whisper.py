@@ -1,31 +1,65 @@
-from typing import Optional, Literal
+from typing import Optional, Any, Dict
+import logging
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Request
+from pydantic import BaseModel
 
 from .. import auth
-from ..services.whisper_service import transcribe_audio
 
 router = APIRouter(prefix="/api/v1/whisper", tags=["whisper"])
 
-ResponseFormat = Literal["json", "verbose_json", "text", "srt", "vtt"]
+
+class AudioToNLResponse(BaseModel):
+    """Respuesta completa: transcripción + ejecución de acciones NL"""
+    transcribed_text: str
+    language: str = "es"
+    summary: str
+    results: list[Dict[str, Any]]
 
 
-@router.post("/transcribe")
-async def transcribe_endpoint(
-    file: UploadFile = File(..., description="Audio a transcribir (m4a/mp3/wav/webm/ogg)"),
-    language: Optional[str] = Form(None, description="Idioma forzado, ej. 'es'"),
-    responseFormat: ResponseFormat = Form("json", description="Formato de respuesta: json|verbose_json|text|srt|vtt"),
-    model: str = Form("whisper-1", description="Modelo de transcripción"),
+@router.post(
+    "/process",
+    response_model=AudioToNLResponse,
+    summary="Procesar audio con Whisper",
+    description="Transcribe audio con Whisper y ejecuta acciones NL automáticamente"
+)
+async def process_audio_endpoint(
+    file: UploadFile = File(..., description="Audio a procesar (mp3/wav/m4a/webm/ogg - máx 3MB)"),
+    language: Optional[str] = Form("es", description="Idioma del audio"),
+    request: Request = None,
     current_user=Depends(auth.get_current_user),
 ):
     """
-    Recibe audio por multipart/form-data y devuelve la transcripción normalizada.
+    Endpoint que SOLO recibe y valida el archivo de audio.
+    Delega toda la lógica al whisper_service.
     """
-    result = await transcribe_audio(
-        file=file,
-        language=language,
-        response_format=responseFormat,
-        model=model,
-    )
-    return JSONResponse(result)
+    from ..services.whisper_service import process_audio_with_nl
+    
+    # Extraer token JWT del header Authorization
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token de autorización requerido")
+    
+    user_token = auth_header.replace("Bearer ", "")
+    
+    try:
+        # Solo validar que hay archivo y delegar al service
+        if not file:
+            raise HTTPException(status_code=400, detail="Archivo de audio requerido")
+        
+        result = await process_audio_with_nl(
+            file=file,
+            language=language,
+            user_token=user_token
+        )
+        
+        return AudioToNLResponse(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"process_audio: Error procesando audio: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error interno al procesar el audio: {str(e)}"
+        )
