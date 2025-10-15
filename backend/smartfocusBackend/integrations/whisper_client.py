@@ -3,15 +3,16 @@ import tempfile
 
 from openai import AsyncOpenAI
 from fastapi import UploadFile
+from typing import Optional
 
 
 class WhisperClient:
-    def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
+    def __init__(self, api_key: Optional[str] = None):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
             raise RuntimeError("OPENAI_API_KEY no está configurada en el entorno.")
-        
-        self.client = AsyncOpenAI(api_key=self.api_key)
+
+        self.client = AsyncOpenAI(api_key=api_key)
 
     # Conexion y transcripcion
     async def transcribe(self, file: UploadFile, language: str = "es") -> str:
