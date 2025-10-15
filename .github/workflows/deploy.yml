@@ -68,6 +68,7 @@ jobs:
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          echo "INTERNAL_API_URL=${{ secrets.INTERNAL_API_URL }}" >> .env
 
       - name: Rsync code (exclude local .env/.git)
         run: |

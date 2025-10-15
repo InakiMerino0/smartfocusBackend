@@ -62,8 +62,16 @@ async def process_audio_with_nl(
 
 # Peticion al endpoint NL
 async def _call_nl_endpoint(text: str, user_token: str) -> Dict[str, Any]:
-
-    base_url = "http://18.116.90.219/"
+    """
+    Hace petición HTTP al endpoint de v1_nl.py en modo execute.
+    Actúa como si fuera el frontend haciendo la llamada.
+    """
+    # Configurar URL base - usar variable de entorno o fallback a la IP del servidor
+    base_url = os.getenv("INTERNAL_API_URL", "http://18.116.90.219")
+    
+    # Asegurar que la URL tiene el protocolo correcto
+    if not base_url.startswith(("http://", "https://")):
+        base_url = f"http://{base_url}"
     
     # Payload JSON como lo haría el frontend
     payload = {
