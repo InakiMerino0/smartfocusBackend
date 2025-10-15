@@ -56,14 +56,19 @@ async def process_audio_with_nl(
     from sqlalchemy.orm import Session
     import contextlib
 
-    # Decodificar usuario desde el token
+    # Obtener usuario usando la función centralizada de autenticación
     db = next(database.get_db())
     try:
-        claims = auth.decodificar_token(user_token)
-        usuario_id = int(claims.get("sub"))
-        usuario = db.get(__import__("..models", fromlist=["Usuario"]).Usuario, usuario_id)
-        if not usuario:
-            raise HTTPException(status_code=401, detail="Usuario no encontrado para el token")
+        # Simular el objeto de credenciales esperado por get_current_user
+        class DummyCreds:
+            def __init__(self, token):
+                self.scheme = "bearer"
+                self.credentials = token
+
+        usuario = auth.get_current_user(
+            creds=DummyCreds(user_token),
+            db=db
+        )
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
 
