@@ -1,7 +1,7 @@
 from typing import Optional, Any, Dict
 import logging
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
 from pydantic import BaseModel
 
 from .. import auth
@@ -26,7 +26,6 @@ class AudioToNLResponse(BaseModel):
 async def process_audio_endpoint(
     file: UploadFile = File(..., description="Audio a procesar (mp3/wav/m4a/webm/ogg - máx 3MB)"),
     language: Optional[str] = Form("es", description="Idioma del audio"),
-    request: Request = None,
     current_user=Depends(auth.get_current_user),
 ):
     """
@@ -35,22 +34,18 @@ async def process_audio_endpoint(
     """
     from ..services.whisper_service import process_audio_with_nl
     
-    # Extraer token JWT del header Authorization
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Token de autorización requerido")
-    
-    user_token = auth_header.replace("Bearer ", "")
-    
     try:
         # Solo validar que hay archivo y delegar al service
         if not file:
             raise HTTPException(status_code=400, detail="Archivo de audio requerido")
         
+        # Obtener token JWT de la sesión actual
+        token = auth.crear_token(str(current_user.usuario_id))
+        
         result = await process_audio_with_nl(
             file=file,
             language=language,
-            user_token=user_token
+            user_token=token
         )
         
         return AudioToNLResponse(**result)
