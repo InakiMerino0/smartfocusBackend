@@ -80,7 +80,7 @@ async def process_audio_with_nl(
 
     # Llamar a la función nl_command directamente
     try:
-        result = nl_command.__wrapped__(
+        result = nl_command(
             payload=payload,
             db=db,
             usuario=usuario,
