@@ -49,70 +49,44 @@ async def process_audio_with_nl(
             detail="No se pudo transcribir texto del audio proporcionado"
         )
     
-    # 2. CONSUMIR ENDPOINT DE NL (como si fuera el frontend)
-    nl_result = await _call_nl_endpoint(transcribed_text, user_token)
-    
-    # 3. COMBINAR RESULTADOS
+    # 2. LLAMAR DIRECTAMENTE A NL (como lo haría el frontend, pero interno)
+    from ..routers.v1_nl import nl_command, NLCommandRequest, get_llm_client
+    from .. import auth, database
+    from fastapi import Depends
+    from sqlalchemy.orm import Session
+    import contextlib
+
+    # Decodificar usuario desde el token
+    db = next(database.get_db())
+    try:
+        claims = auth.decodificar_token(user_token)
+        usuario_id = int(claims.get("sub"))
+        usuario = db.get(__import__("..models", fromlist=["Usuario"]).Usuario, usuario_id)
+        if not usuario:
+            raise HTTPException(status_code=401, detail="Usuario no encontrado para el token")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
+
+    # Instanciar el cliente LLM
+    llm = get_llm_client()
+
+    # Construir el payload como lo haría el frontend
+    payload = NLCommandRequest(text=transcribed_text, mode="execute")
+
+    # Llamar a la función nl_command directamente
+    try:
+        result = nl_command.__wrapped__(
+            payload=payload,
+            db=db,
+            usuario=usuario,
+            llm=llm
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error ejecutando NL: {str(e)}")
+
     return {
         "transcribed_text": transcribed_text,
         "language": language,
-        "summary": nl_result.get("summary", "Procesado correctamente"),
-        "results": nl_result.get("results", [])
+        "summary": result.get("summary", "Procesado correctamente"),
+        "results": result.get("results", [])
     }
-
-# Peticion al endpoint NL
-async def _call_nl_endpoint(text: str, user_token: str) -> Dict[str, Any]:
-    """
-    Hace petición HTTP al endpoint de v1_nl.py en modo execute.
-    Actúa como si fuera el frontend haciendo la llamada.
-    """
-    # Configurar URL base - usar variable de entorno o fallback a la IP del servidor
-    base_url = os.getenv("INTERNAL_API_URL", "http://18.116.90.219")
-    
-    # Asegurar que la URL tiene el protocolo correcto
-    if not base_url.startswith(("http://", "https://")):
-        base_url = f"http://{base_url}"
-    
-    # Payload JSON como lo haría el frontend
-    payload = {
-        "text": text,
-        "mode": "execute"
-    }
-    
-    # Headers con autenticación
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {user_token}"
-    }
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{base_url}/api/v1/nl/command",
-                json=payload,
-                headers=headers,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                # Si falla NL, devolver error pero texto transcrito OK
-                return {
-                    "summary": f"{response.status_code}. Texto transcrito correctamente.",
-                    "results": [],
-                    "nl_error": response.text
-                }
-                
-    except httpx.RequestError as e:
-        return {
-            "summary": f"Error conectando con servicio NL: {str(e)}. Texto transcrito correctamente.",
-            "results": [],
-            "nl_error": str(e)
-        }
-    except Exception as e:
-        return {
-            "summary": f"Error inesperado con NL: {str(e)}. Texto transcrito correctamente.",
-            "results": [],
-            "nl_error": str(e)
-        }
