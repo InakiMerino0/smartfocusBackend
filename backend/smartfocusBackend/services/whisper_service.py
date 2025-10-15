@@ -63,7 +63,7 @@ async def process_audio_with_nl(
 # Peticion al endpoint NL
 async def _call_nl_endpoint(text: str, user_token: str) -> Dict[str, Any]:
 
-    base_url = os.getenv("http://18.116.90.219/")
+    base_url = "http://18.116.90.219/"
     
     # Payload JSON como lo haría el frontend
     payload = {
