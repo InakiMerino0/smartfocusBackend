@@ -17,13 +17,11 @@ En el mundo académico actual, el tiempo es el recurso más valioso y escaso. La
 **SmartFocus** nació para solucionar este problema. No es solo otra app de tareas; es un **asistente inteligente diseñado para ser tu secretario personal**. Nuestra visión es crear una herramienta tan intuitiva y potente que se convierta en un aliado fundamental en el éxito académico de sus usuarios, permitiéndoles organizarse sin esfuerzo para que puedan concentrarse en lo que realmente importa: aprender.
 
 
-*<p align="center">👆 <strong>(Aquí va tu GIF)</strong> Un GIF mostrando el flujo: un comando de voz crea un evento y este aparece instantáneamente en el calendario de la app.</p>*
-
 ---
 
 ## 🎯 Características Actuales (MVP)
 
-Este proyecto es un MVP (Producto Mínimo Viable) funcional que sienta las bases de nuestra visión. Actualmente, la API es capaz de:
+Este proyecto es un MVP funcional que sienta las bases de nuestra visión. Actualmente, la API es capaz de:
 
 * 🗣️ **Procesamiento de Lenguaje Natural y Voz:** Interactúa con la API usando comandos de texto o de voz para gestionar tu agenda.
 * 📚 **Gestión Completa de Materias:** Añade, modifica y elimina tus cursos fácilmente.
@@ -80,7 +78,9 @@ erDiagram
         string estado
         int materia_id FK
     }
+```
 
+---
 
 sequenceDiagram
     Client->>API: POST /api/v1/nl/command (con JWT)
@@ -102,6 +102,6 @@ Este proyecto es solo el comienzo. Tenemos un camino claro para convertir SmartF
 
 [ ] Estados Personalizables: Permitir a los usuarios crear estados personalizados para sus tareas y eventos, al estilo Notion.
 
-[ ] Integración con Calendarios Externos: Sincronización con Google Calendar, Outlook, etc.
+[ ] Integración con Calendarios Externos: Sincronización con Google Calendar, Notion Calendar, etc.
 
 [ ] Implementación de Tests: Desarrollar una suite de pruebas robusta con pytest para garantizar la estabilidad del código.
