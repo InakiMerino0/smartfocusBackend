@@ -111,6 +111,69 @@ sequenceDiagram
 
 ---
 
+## 🚀 Guía de Inicio Rápido
+
+Sigue estos pasos para clonar, configurar y ejecutar el proyecto en tu máquina local. Se asume que ya tienes **Git**, **Docker** y **Docker Compose** instalados.
+
+### 1. Clona el Repositorio
+
+Abre tu terminal y ejecuta el siguiente comando para descargar el código fuente:
+
+```bash
+git clone [https://github.com/InakiMerino0/smartfocusBackend.git](https://github.com/InakiMerino0/smartfocusBackend.git)
+```
+
+### 2. Navega al Directorio del Proyecto
+Una vez clonado, entra en la carpeta del proyecto:
+
+Bash
+```
+cd smartfocusBackend
+3. Crea tu Archivo de Configuración (.env)
+El proyecto utiliza variables de entorno para gestionar claves de API y configuraciones. Debes crear tu propio archivo .env a partir de la plantilla proporcionada.
+
+Bash
+
+cp .env.example .env
+4. Configura tus Variables de Entorno
+Ahora, abre el archivo .env que acabas de crear con tu editor de texto preferido. Es crucial que añadas tus propias claves de API y credenciales para que la aplicación funcione.
+
+```
+
+Fragmento de código
+```
+# .env
+
+# --- PostgreSQL Database ---
+POSTGRES_USER=tu_usuario_de_db
+POSTGRES_PASSWORD=tu_contraseña_segura
+POSTGRES_DB=smartfocusdb
+DB_HOST=db
+DB_PORT=5432
+
+# --- JWT Authentication ---
+SECRET_KEY=genera_una_clave_secreta_larga_y_aleatoria
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# --- External APIs ---
+GEMINI_API_KEY=tu_clave_de_api_de_google_gemini
+OPENAI_API_KEY=tu_clave_de_api_de_openai
+```
+### 5. Levanta los Servicios con Docker Compose
+Este comando leerá el archivo docker-compose.yml, construirá las imágenes de la API y la base de datos, y las ejecutará en contenedores aislados en segundo plano (-d).
+
+Bash
+```
+docker-compose up -d
+```
+### 6. ¡Listo! Verifica que Funciona ✅
+Si todo ha ido bien, la API estará funcionando. La mejor forma de probarla es a través de la documentación interactiva de Swagger UI, que te permite interactuar con todos los endpoints directamente desde el navegador.
+
+API disponible en: http://localhost:8000
+
+Documentación Interactiva: http://localhost:8000/docs
+
 
 ## 🗺️ Visión a Futuro (Roadmap)
 Este proyecto es solo el comienzo. Tenemos un camino claro para convertir SmartFocus en un asistente indispensable:
