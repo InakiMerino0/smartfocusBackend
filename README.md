@@ -39,7 +39,7 @@ Este proyecto es un MVP funcional que sienta las bases de nuestra visión. Actua
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Amazon AWS](https://img.shields.io/badge/Amazon_AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white)
+![AWS](https://img.shields.io/badge/Amazon_AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Gemini-8E75B7?style=for-the-badge&logo=google-gemini&logoColor=white)
@@ -82,6 +82,9 @@ erDiagram
 
 ---
 
+### Flujo de Comando (Texto a Acción)
+
+```mermaid
 sequenceDiagram
     Client->>API: POST /api/v1/nl/command (con JWT)
     API->>Auth: Verificar token
@@ -92,6 +95,10 @@ sequenceDiagram
     Database-->>NL Service: Confirmación
     NL Service-->>API: Resultado
     API-->>Client: 200 OK
+```
+
+---
+
 
 ## 🗺️ Visión a Futuro (Roadmap)
 Este proyecto es solo el comienzo. Tenemos un camino claro para convertir SmartFocus en un asistente indispensable:
