@@ -129,18 +129,17 @@ Una vez clonado, entra en la carpeta del proyecto:
 Bash
 ```
 cd smartfocusBackend
-3. Crea tu Archivo de Configuración (.env)
+```
+### 3. Crea tu Archivo de Configuración (.env)
 El proyecto utiliza variables de entorno para gestionar claves de API y configuraciones. Debes crear tu propio archivo .env a partir de la plantilla proporcionada.
 
 Bash
-
+```
 cp .env.example .env
-4. Configura tus Variables de Entorno
+```
+### 4. Configura tus Variables de Entorno
 Ahora, abre el archivo .env que acabas de crear con tu editor de texto preferido. Es crucial que añadas tus propias claves de API y credenciales para que la aplicación funcione.
 
-```
-
-Fragmento de código
 ```
 # .env
 
@@ -159,6 +158,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 # --- External APIs ---
 GEMINI_API_KEY=tu_clave_de_api_de_google_gemini
 OPENAI_API_KEY=tu_clave_de_api_de_openai
+
 ```
 ### 5. Levanta los Servicios con Docker Compose
 Este comando leerá el archivo docker-compose.yml, construirá las imágenes de la API y la base de datos, y las ejecutará en contenedores aislados en segundo plano (-d).
