@@ -86,15 +86,27 @@ erDiagram
 
 ```mermaid
 sequenceDiagram
-    Client->>API: POST /api/v1/nl/command (con JWT)
-    API->>Auth: Verificar token
-    API->>NL Service: Procesar comando de texto
-    NL Service->>Gemini API: Generar plan de acciones (ej: crear evento)
-    Gemini API-->>NL Service: Plan de acciones
-    NL Service->>Database: Ejecutar acciones (INSERT en tabla Eventos)
-    Database-->>NL Service: Confirmación
-    NL Service-->>API: Resultado
-    API-->>Client: 200 OK
+    participant Client
+    participant SmartFocus API
+    participant Whisper API
+    participant Gemini API
+    participant Database
+
+    alt Comando vía Texto
+        Client->>SmartFocus API: POST /v1/nl/command (con texto y JWT)
+    else Comando vía Audio
+        Client->>SmartFocus API: POST /v1/whisper/transcribe (con audio y JWT)
+        SmartFocus API->>Whisper API: Enviar audio para transcripción
+        Whisper API-->>SmartFocus API: Devolver texto transcrito
+    end
+
+    %% --- El flujo común de procesamiento comienza aquí ---
+    SmartFocus API->>SmartFocus API: 1. Verificar token JWT del usuario
+    SmartFocus API->>Gemini API: 2. Enviar texto para generar plan de acciones
+    Gemini API-->>SmartFocus API: 3. Devolver plan (ej: crear evento)
+    SmartFocus API->>Database: 4. Ejecutar acciones en la BBDD
+    Database-->>SmartFocus API: 5. Confirmar ejecución
+    SmartFocus API-->>Client: 6. Devolver resultado (200 OK)
 ```
 
 ---
