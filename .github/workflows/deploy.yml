@@ -90,7 +90,7 @@ jobs:
             set -e
             cd $APP_DIR
 
-            # ✅ bajamos exactamente la imagen que acabamos de publicar
+            # ✅ bajamoss exactamente la imagen que acabamos de publicar
             docker compose pull backend || true
 
             # ✅ recreamos solo backend con esa imagen (evita quedarse con el contenedor viejo)
