@@ -43,11 +43,34 @@ jobs:
 
       - name: Setup SSH
         run: |
+          set -e
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf "%s" "${{ secrets.EC2_TEST_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
+          # Escribe tal cual el secret
+          printf "%s" "${{ secrets.EC2_TEST_SSH_KEY }}" > ~/.ssh/id_ed25519.raw
+          # Si vino en una sola línea con "\n", conviértelo a saltos reales
+          if grep -q "\\n" ~/.ssh/id_ed25519.raw; then
+            sed 's/\\n/\n/g' ~/.ssh/id_ed25519.raw > ~/.ssh/id_ed25519
+          else
+            cp ~/.ssh/id_ed25519.raw ~/.ssh/id_ed25519
+          fi
+          # Quitar CRLF
+          tr -d '\r' < ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.clean
+          mv ~/.ssh/id_ed25519.clean ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+
+      - name: SSH sanity check
+        run: |
+          set -e
+          # Ver que la privada sea OpenSSH
+          head -n1 ~/.ssh/id_ed25519
+          # Derivar la pública desde la privada y mostrar fingerprint
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /tmp/derived.pub
+          ssh-keygen -lf /tmp/derived.pub
+          # Intento de conexión simple
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+            -v "$EC2_USER@$EC2_HOST" "echo OK-from-EC2" || exit 1
 
       - name: Generate .env (from Secrets)
         run: |
