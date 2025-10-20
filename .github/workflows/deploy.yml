@@ -74,19 +74,19 @@ jobs:
         run: |
           rsync -az --delete \
             --exclude='.git' --exclude='.env' \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            -e "ssh -i ~/.ssh/authorized_keys -o IdentitiesOnly=yes" \
             ./ "$EC2_USER@$EC2_HOST:$APP_DIR/"
 
       - name: Upload .env
         run: |
-          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes ./.env \
+          scp -i ~/.ssh/authorized_keys -o IdentitiesOnly=yes ./.env \
             "$EC2_USER@$EC2_HOST:$APP_DIR/.env"
 
       - name: Compose pull / build & up
         env:
           SHA: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" "
+          ssh -i ~/.ssh/authorized_keys -o IdentitiesOnly=yes "$EC2_USER@$EC2_HOST" "
             set -e
             cd $APP_DIR
 
