@@ -1,3 +1,11 @@
+### Entregables
+
+[Elevator pitch y Video demo](https://drive.google.com/drive/folders/1-8_IEUGDoZFjD3P0Bwc_E0rWwYzz267X?usp=sharing)
+[Informe PDF](https://docs.google.com/document/d/1RWNLFnqIgU6TwNfBVo5oVZ2RNO22OuTfbsB4CIG3P2Y/edit?tab=t.0)
+
+
+---
+
 # SmartFocus API 🚀
 
 ### Tu secretario personal con IA para conquistar tu vida académica.
