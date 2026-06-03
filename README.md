@@ -1,9 +1,4 @@
-### Entregables
 
-[Elevator pitch y Video demo](https://drive.google.com/drive/folders/1-8_IEUGDoZFjD3P0Bwc_E0rWwYzz267X?usp=sharing)
-
-
-[Informe PDF](https://docs.google.com/document/d/1RWNLFnqIgU6TwNfBVo5oVZ2RNO22OuTfbsB4CIG3P2Y/edit?tab=t.0)
 
 
 ---
@@ -12,18 +7,9 @@
 
 ### Secretario personal con IA para la vida académica.
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
-
----
-
 ## Menos Estrés, Mejores Resultados
 
-En el mundo académico actual, el tiempo es el recurso más valioso y escaso. La frustración de gestionar múltiples materias, fechas de entrega y exámenes puede ser abrumadora, llevando a muchos estudiantes al límite.
-
-**SmartFocus** nació para solucionar este problema. No es solo otra app de tareas; es un **asistente inteligente diseñado para ser tu secretario personal**. Nuestra visión es crear una herramienta tan intuitiva y potente que se convierta en un aliado fundamental en el éxito académico de sus usuarios, permitiéndoles organizarse sin esfuerzo para que puedan concentrarse en lo que realmente importa: aprender.
+**SmartFocus** nació como un **asistente inteligente diseñado para ser tu secretario personal**. La visión es crear una herramienta tan intuitiva y potente que se convierta en un aliado fundamental en el éxito académico de sus usuarios, permitiéndoles organizarse sin esfuerzo para que puedan concentrarse en aprender y no tanto en gestionar.
 
 
 ---
