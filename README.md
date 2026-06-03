@@ -8,7 +8,7 @@
 
 ---
 
-# SmartFocus API 🚀
+# SmartFocus API
 
 ### Tu secretario personal con IA para conquistar tu vida académica.
 
@@ -20,7 +20,7 @@
 
 ---
 
-## ✨ La Visión: Menos Estrés, Mejores Resultados
+## Menos Estrés, Mejores Resultados
 
 En el mundo académico actual, el tiempo es el recurso más valioso y escaso. La frustración de gestionar múltiples materias, fechas de entrega y exámenes puede ser abrumadora, llevando a muchos estudiantes al límite.
 
@@ -29,19 +29,19 @@ En el mundo académico actual, el tiempo es el recurso más valioso y escaso. La
 
 ---
 
-## 🎯 Características Actuales (MVP)
+## Características Actuales (MVP)
 
 Este proyecto es un MVP funcional que sienta las bases de nuestra visión. Actualmente, la API es capaz de:
 
-* 🗣️ **Procesamiento de Lenguaje Natural y Voz:** Interactúa con la API usando comandos de texto o de voz para gestionar tu agenda.
-* 📚 **Gestión Completa de Materias:** Añade, modifica y elimina tus cursos fácilmente.
-* 🗓️ **Organización de Eventos:** Crea tareas, recordatorios de exámenes o fechas de entrega con descripciones y plazos.
-* 🤖 **Acciones Inteligentes:** Usa lenguaje natural para realizar operaciones complejas como *"elimina todos los eventos de la materia física"*.
-* 🔐 **Autenticación Segura:** Sistema robusto basado en JWT para proteger la información de cada usuario.
+*  **Procesamiento de Lenguaje Natural y Voz:** Interactúa con la API usando comandos de texto o de voz para gestionar tu agenda.
+*  **Gestión Completa de Materias:** Añade, modifica y elimina tus cursos fácilmente.
+*  **Organización de Eventos:** Crea tareas, recordatorios de exámenes o fechas de entrega con descripciones y plazos.
+*  **Acciones Inteligentes:** Usa lenguaje natural para realizar operaciones complejas como *"elimina todos los eventos de la materia física"*.
+*  **Autenticación Segura:** Sistema robusto basado en JWT para proteger la información de cada usuario.
 
 ---
 
-## 🛠️ Stack Tecnológico
+##  Stack Tecnológico
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
@@ -57,7 +57,7 @@ Este proyecto es un MVP funcional que sienta las bases de nuestra visión. Actua
 
 ---
 
-## 🏗️ Arquitectura y Flujos de Datos
+##  Arquitectura y Flujos de Datos
 
 El backend sigue una arquitectura limpia por capas para separar responsabilidades (`routers`, `services`, `integrations`, `models`), garantizando un código mantenible y escalable.
 
@@ -121,7 +121,7 @@ sequenceDiagram
 
 ---
 
-## 🚀 Guía de Inicio Rápido
+##  Guía de Inicio Rápido
 
 Sigue estos pasos para clonar, configurar y ejecutar el proyecto en tu máquina local. Se asume que ya tienes **Git**, **Docker** y **Docker Compose** instalados.
 
@@ -177,7 +177,7 @@ Bash
 ```
 docker-compose up -d
 ```
-### 6. ¡Listo! Verifica que Funciona ✅
+### 6. Verifica que Funciona 
 Si todo ha ido bien, la API estará funcionando. La mejor forma de probarla es a través de la documentación interactiva de Swagger UI, que te permite interactuar con todos los endpoints directamente desde el navegador.
 
 API disponible en: http://localhost:8000
@@ -185,8 +185,7 @@ API disponible en: http://localhost:8000
 Documentación Interactiva: http://localhost:8000/docs
 
 
-## 🗺️ Visión a Futuro (Roadmap)
-Este proyecto es solo el comienzo. Tenemos un camino claro para convertir SmartFocus en un asistente indispensable:
+## Roadmap a seguir
 
 [ ] IA Avanzada: Mejorar el motor de NLP para entender peticiones mucho más complejas y contextuales.
 
@@ -194,6 +193,4 @@ Este proyecto es solo el comienzo. Tenemos un camino claro para convertir SmartF
 
 [ ] Estados Personalizables: Permitir a los usuarios crear estados personalizados para sus tareas y eventos, al estilo Notion.
 
-[ ] Integración con Calendarios Externos: Sincronización con Google Calendar, Notion Calendar, etc.
-
-[ ] Implementación de Tests: Desarrollar una suite de pruebas robusta con pytest para garantizar la estabilidad del código.
+[ ] Integración OAuth con Calendarios Externos: Sincronización con Google Calendar, Notion Calendar, etc.
