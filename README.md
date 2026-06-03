@@ -10,9 +10,8 @@
 
 # SmartFocus API
 
-### Tu secretario personal con IA para conquistar tu vida académica.
+### Secretario personal con IA para la vida académica.
 
-![CI/CD Pipeline](https://github.com/InakiMerino0/smartfocusBackend/actions/workflows/main.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
@@ -31,7 +30,7 @@ En el mundo académico actual, el tiempo es el recurso más valioso y escaso. La
 
 ## Características Actuales (MVP)
 
-Este proyecto es un MVP funcional que sienta las bases de nuestra visión. Actualmente, la API es capaz de:
+Este proyecto es un MVP funcional que sienta las bases del proyecto. Actualmente, la API es capaz de:
 
 *  **Procesamiento de Lenguaje Natural y Voz:** Interactúa con la API usando comandos de texto o de voz para gestionar tu agenda.
 *  **Gestión Completa de Materias:** Añade, modifica y elimina tus cursos fácilmente.
